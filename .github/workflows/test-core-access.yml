@@ -1,0 +1,35 @@
+name: Test private Core access
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-core-access:
+    name: Test private Core access
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout private P2P Core
+        uses: actions/checkout@v4
+        with:
+          repository: BohozX/Dev-Vault
+          ref: main
+          token: ${{ secrets.DEV_VAULT_READ }}
+          path: private
+          sparse-checkout: |
+            P2P-Core
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+
+      - name: Validate private Core access
+        shell: bash
+        run: |
+          test -d "$GITHUB_WORKSPACE/private/P2P-Core/codigo"
+          test -d "$GITHUB_WORKSPACE/private/P2P-Core/datos"
+          test -d "$GITHUB_WORKSPACE/private/P2P-Core/config"
+          test -f "$GITHUB_WORKSPACE/private/P2P-Core/README.md"
+          printf '%s\n' 'P2P Core access: OK'
