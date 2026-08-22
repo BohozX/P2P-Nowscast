@@ -1,0 +1,70 @@
+name: Descargar RAW 2026-08-21
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  download-raw:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # 1. Probar acceso al Core privado
+      - name: Checkout P2P-Core privado
+        uses: actions/checkout@v4
+        with:
+          repository: BohozX/Dev-Vault
+          ref: main
+          token: ${{ secrets.DEV_VAULT_READ }}
+          path: private
+          sparse-checkout: |
+            P2P-Core
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+
+      # 2. Autenticación temporal con Google mediante OIDC/WIF
+      - name: Autenticar con Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      # 3. Instalar gcloud en el runner
+      - name: Configurar Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      # 4. Descargar SOLO el día 21/08/2026
+      - name: Descargar RAW del 21 de agosto
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p2p_2026-08-21"
+          gcloud storage cp --recursive \
+            "gs://p2p-bolivia-raw-506117/raw/2026/08/21/*" \
+            "$RUNNER_TEMP/p2p_2026-08-21/"
+          echo "Archivos descargados:"
+          find "$RUNNER_TEMP/p2p_2026-08-21" \
+            -type f -name "*.jsonl.gz" | wc -l
+          echo "Tamaño total:"
+          du -sh "$RUNNER_TEMP/p2p_2026-08-21"
+
+      # 5. Comprimir todo en un solo archivo
+      - name: Comprimir RAW
+        shell: bash
+        run: |
+          tar -czf "$RUNNER_TEMP/p2p_2026-08-21.tar.gz" \
+            -C "$RUNNER_TEMP/p2p_2026-08-21" .
+          ls -lh "$RUNNER_TEMP/p2p_2026-08-21.tar.gz"
+
+      # 6. Dejarlo disponible para descargar desde GitHub
+      - name: Subir archivo para descarga
+        uses: actions/upload-artifact@v4
+        with:
+          name: p2p-raw-2026-08-21
+          path: ${{ runner.temp }}/p2p_2026-08-21.tar.gz
+          retention-days: 1
+          if-no-files-found: error
