@@ -1,0 +1,121 @@
+name: Descargar captura P2P cifrada
+
+on:
+  workflow_dispatch:
+    inputs:
+      capture_date:
+        description: Fecha Bolivia (YYYY-MM-DD)
+        required: true
+        default: "2026-08-22"
+      capture_time:
+        description: Hora Bolivia (HHMM)
+        required: true
+        default: "1100"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/download-capture-encrypted.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  download-encrypted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Autenticar con Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Configurar Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Descargar y cifrar captura exacta
+        shell: bash
+        env:
+          TARGET_DATE: ${{ inputs.capture_date || '2026-08-22' }}
+          TARGET_TIME: ${{ inputs.capture_time || '1100' }}
+        run: |
+          set -euo pipefail
+          IFS=- read -r year month day <<< "$TARGET_DATE"
+          folder="gs://p2p-bolivia-raw-506117/raw/$year/$month/$day/"
+          prefix="p2p_raw_${year}${month}${day}T${TARGET_TIME}BOL_"
+
+          matches=()
+          for attempt in {1..15}; do
+            mapfile -t matches < <(
+              gcloud storage ls "$folder" 2>/dev/null |
+              grep "/${prefix}[^/]*\.jsonl\.gz$" || true
+            )
+            if (( ${#matches[@]} > 0 )); then
+              break
+            fi
+            sleep 20
+          done
+
+          if (( ${#matches[@]} == 0 )); then
+            echo "No se encontró la captura solicitada." >&2
+            exit 1
+          fi
+
+          object="${matches[${#matches[@]}-1]}"
+          work="$RUNNER_TEMP/capture"
+          artifact="$RUNNER_TEMP/encrypted-artifact"
+          mkdir -p "$work" "$artifact"
+          gcloud storage cp "$object" "$work/"
+
+          source="$work/$(basename "$object")"
+          test -s "$source"
+
+          cat > "$work/public.pem" <<'PUBLIC_KEY'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAt+OI1VkdGZF9nguGnJpN
+          In3xza05ir8YPGfj+3GjD+TZP3KaxqDNSoTotYSPAJdJJex5arycNuVYL9tRWHTu
+          LrrEMaQALoDXUcAIrRClVeVAuJ6RUPTw67OgB4RRRnkAdFKxMyBGUit+9zJ5wUn/
+          RNboN/erMZlREj3HJLpSpHyT5uB3IPAc1EAt7IxaKGttctjcYt8nPe0A6xDL9VHV
+          q9nKEYkp6LAaKeXTF22KS7QwrZwSK4YgvsBFSDh2PCfe61DYs5Whr+0HqP20hzNL
+          wSNOMLsgsLO8pFTHwdRtjRn6aNaZ2XZrE7fHQJQO5DYhxr1fRcx/SorOMPB9x6/p
+          rAeZM7lWQQ0Ceoh0sbgy/2M0cIIt0G+rJYxWn745YFSiZZ5/jT20tTzpa3iJ/Huw
+          5TdaboehGhg6orBl3YX8xieycBel5IrVCTh8w2yzhIOHfQAhH54zy+YBAV+vQ5uB
+          2zWg3vqhMc8/3AfH7Fdp5zwU1ZCVGsKWUUsUsjBUH7mrAgMBAAE=
+          -----END PUBLIC KEY-----
+          PUBLIC_KEY
+
+          openssl rand -out "$work/aes-key.bin" 32
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 \
+            -in "$source" \
+            -out "$artifact/capture.jsonl.gz.enc" \
+            -pass file:"$work/aes-key.bin"
+
+          openssl pkeyutl -encrypt -pubin \
+            -inkey "$work/public.pem" \
+            -pkeyopt rsa_padding_mode:oaep \
+            -pkeyopt rsa_oaep_md:sha256 \
+            -in "$work/aes-key.bin" \
+            -out "$artifact/aes-key.bin.enc"
+
+          {
+            echo "original_file=$(basename "$source")"
+            echo "original_sha256=$(sha256sum "$source" | cut -d' ' -f1)"
+            echo "encrypted_sha256=$(sha256sum "$artifact/capture.jsonl.gz.enc" | cut -d' ' -f1)"
+          } > "$artifact/manifest.txt"
+
+          shred -u "$source" "$work/aes-key.bin" "$work/public.pem" 2>/dev/null || true
+
+          echo "### Captura cifrada" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Archivo original: \`$(basename "$object")\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- El artifact contiene únicamente datos cifrados." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Subir artifact cifrado temporal
+        uses: actions/upload-artifact@v4
+        with:
+          name: p2p-capture-encrypted-${{ inputs.capture_date || '2026-08-22' }}-${{ inputs.capture_time || '1100' }}
+          path: ${{ runner.temp }}/encrypted-artifact/
+          retention-days: 1
+          if-no-files-found: error
