@@ -1,0 +1,44 @@
+# Entornos y secretos locales
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Compilaciones y distribución
+build/
+dist/
+_site/
+
+# Checkout temporal del Core privado en GitHub Actions
+private/
+gha-creds-*.json
+
+# Ningún RAW ni paquete de datos puede entrar al repositorio público
+raw/
+**/raw/
+*.jsonl
+*.jsonl.gz
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Los agregados publicos se generan en el runner y se despliegan en Pages.
+# No se versionan para evitar copias historicas y datos desactualizados.
+pagina/data/
+
+# Editores y sistema operativo
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

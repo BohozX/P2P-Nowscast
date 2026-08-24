@@ -1,0 +1,176 @@
+name: P2P Nowcasting Bolivia
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "pagina/**"
+      - ".github/workflows/p2p-nowcast.yml"
+  schedule:
+    - cron: "*/5 * * * *"
+
+concurrency:
+  group: p2p-nowcast-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+  pages: write
+
+jobs:
+  calculate:
+    if: github.event_name != 'schedule' || vars.P2P_NOWCAST_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout repositorio publico
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Checkout Core privado
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: ${{ secrets.DEV_VAULT_REPOSITORY }}
+          ref: main
+          ssh-key: ${{ secrets.DEV_VAULT_DEPLOY_KEY }}
+          path: private
+          sparse-checkout: |
+            ${{ secrets.DEV_VAULT_CORE_PATH }}
+          sparse-checkout-cone-mode: true
+          persist-credentials: true
+
+      - name: Configurar Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.13"
+
+      - name: Autenticar con Google Cloud mediante OIDC
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Configurar Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
+
+      - name: Validar configuracion privada
+        shell: bash
+        env:
+          CORE_PATH: ${{ secrets.DEV_VAULT_CORE_PATH }}
+          RAW_GCS_URI: ${{ secrets.GCP_RAW_URI }}
+          STATE_GCS_URI: ${{ secrets.GCP_STATE_URI }}
+          PRIVATE_HISTORY_GCS_URI: ${{ secrets.GCP_PRIVATE_HISTORY_URI }}
+        run: |
+          set -euo pipefail
+          test -n "$CORE_PATH"
+          case "$CORE_PATH" in
+            /*|*..*) echo "Ruta privada no valida" >&2; exit 1 ;;
+          esac
+          for uri in "$RAW_GCS_URI" "$STATE_GCS_URI" "$PRIVATE_HISTORY_GCS_URI"; do
+            case "$uri" in
+              gs://*) ;;
+              *) echo "Configuracion privada no valida" >&2; exit 1 ;;
+            esac
+          done
+
+      - name: Procesar capturas nuevas y exportar agregados
+        shell: bash
+        env:
+          CORE_PATH: ${{ secrets.DEV_VAULT_CORE_PATH }}
+          RAW_GCS_URI: ${{ secrets.GCP_RAW_URI }}
+          STATE_GCS_URI: ${{ secrets.GCP_STATE_URI }}
+          PRIVATE_HISTORY_GCS_URI: ${{ secrets.GCP_PRIVATE_HISTORY_URI }}
+        run: |
+          set -euo pipefail
+          python "private/$CORE_PATH/codigo/main.py" run-gcs \
+            --raw-uri "$RAW_GCS_URI" \
+            --state-uri "$STATE_GCS_URI" \
+            --start-date "2026-08-21" \
+            --temp-dir "$RUNNER_TEMP/p2p-nowcast" \
+            --public-out "$GITHUB_WORKSPACE/pagina/data" \
+            --private-out "$GITHUB_WORKSPACE/private/$CORE_PATH/datos" \
+            --private-history-uri "$PRIVATE_HISTORY_GCS_URI"
+
+      - name: Sincronizar historicos derivados con Dev-Vault
+        shell: bash
+        env:
+          CORE_PATH: ${{ secrets.DEV_VAULT_CORE_PATH }}
+        run: |
+          set -euo pipefail
+          git -C private add -- "$CORE_PATH/datos"
+          if git -C private diff --cached --quiet; then
+            echo "Dev-Vault ya contiene los historicos derivados actuales."
+            exit 0
+          fi
+          git -C private config user.name "p2p-nowcast[bot]"
+          git -C private config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C private commit -m "data: actualizar historicos privados"
+          git -C private pull --rebase origin main
+          git -C private push origin HEAD:main
+
+      - name: Verificar frontera publica
+        shell: bash
+        run: |
+          set -euo pipefail
+          python pagina/herramientas/verify_public_data.py pagina/data
+          if find . -path './.git' -prune -o -path './private' -prune -o \
+            -type f \( -name '*.jsonl' -o -name '*.jsonl.gz' -o -name '*.zip' \
+            -o -name '*.tar' -o -name '*.tar.gz' -o -name '*.tgz' \) -print | grep -q .; then
+            echo "Se detecto un RAW o paquete prohibido en el repositorio" >&2
+            exit 1
+          fi
+
+      - name: Preparar sitio minimo
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp pagina/index.html pagina/.nojekyll _site/
+          cp -R pagina/assets pagina/data _site/
+
+      - name: Configurar Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
+
+      - name: Subir sitio publico
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
+        with:
+          path: _site
+          retention-days: 1
+
+      - name: Desplegar Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128
+
+  cleanup-artifact:
+    name: Eliminar artifact temporal
+    needs: calculate
+    if: ${{ always() && needs.calculate.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+
+    steps:
+      - name: Eliminar artifact del despliegue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.name == "github-pages") | .id' |
+          while read -r artifact_id; do
+            test -n "$artifact_id"
+            gh api --method DELETE \
+              "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}"
+          done
