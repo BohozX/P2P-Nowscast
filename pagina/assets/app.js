@@ -1159,6 +1159,9 @@ function bindEvents() {
   svg.addEventListener("pointermove", showTooltip);
   svg.addEventListener("pointerdown", showTooltip);
   svg.addEventListener("pointerleave", hideTooltip);
+  svg.addEventListener("pointerup", hideTooltip);
+  svg.addEventListener("pointercancel", hideTooltip);
+  svg.addEventListener("contextmenu", (event) => event.preventDefault());
 
   let resizeTimer = 0;
   window.addEventListener("resize", () => {

@@ -658,3 +658,13 @@ h1 {
 }
 
 .metric-note.delta { font-size: 11.5px; font-weight: 700; }
+
+/* En movil el gesto vertical debe seguir desplazando la pagina aunque empiece
+   sobre el grafico; solo el arrastre horizontal mueve el crosshair. Y se anula
+   el menu de pulsacion larga, que ofrecia descargar el SVG como imagen. */
+.chart-wrap, #market-chart {
+  touch-action: pan-y;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
