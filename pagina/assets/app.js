@@ -1,15 +1,38 @@
+/* P2P Nowcast Bolivia — interfaz publica.
+   Este archivo solo renderiza. No calcula ni corrige ningun indicador de mercado:
+   los valores P2P se muestran tal como llegan en los JSON publicos y el tipo de
+   cambio oficial tal como lo publica el CSV diario de TCO-BCB. */
+
 const allowedFrequencies = {
   USDT: ["5m", "1h", "1d"],
   USDC: ["1h", "1d"],
 };
 const allowedRanges = [1, 7, 30];
 
+const FREQ_OPTIONS = [
+  { id: "5m", label: "5m" },
+  { id: "15m", label: "15m", locked: true },
+  { id: "30m", label: "30m", locked: true },
+  { id: "1h", label: "1h" },
+  { id: "4h", label: "4h", locked: true },
+  { id: "1d", label: "1D" },
+];
+
+/* Serie oficial publicada en el repositorio publico TCO-BCB. */
+const TCO_URL = "https://raw.githubusercontent.com/BohozX/TCO-BCB/main/datos/tco.csv";
+
 const state = {
   asset: "USDT",
   frequency: "5m",
   rangeDays: 30,
   showVolume: true,
+  visible: { p2pVenta: true, p2pCompra: true, tcoVenta: true, tcoCompra: true },
   rows: [],
+  tco: new Map(),
+  tcoLatest: null,
+  asOf: null,
+  loading: false,
+  token: 0,
 };
 
 // El dato conserva su clave contractual. La etiqueta se muestra desde la
@@ -19,13 +42,23 @@ const displaySides = [
   { key: "SELL", path: "venta", label: "Compra", slug: "compra" },
 ];
 
-const frequencyLabels = { "5m": "5 MIN", "1h": "1 HORA", "1d": "1 DÍA" };
+const SERIES = [
+  { id: "p2pVenta", label: "P2P Venta", color: "#35e08b", width: 2.4, dash: "" },
+  { id: "p2pCompra", label: "P2P Compra", color: "#46c8ea", width: 2.4, dash: "" },
+  { id: "tcoVenta", label: "TCO Venta", color: "#d7e2dd", width: 1.8, dash: "7 4" },
+  { id: "tcoCompra", label: "TCO Compra", color: "#8aa39a", width: 1.8, dash: "2 4" },
+];
+
+const frequencyLabels = { "5m": "5 minutos", "1h": "1 hora", "1d": "1 día" };
 const integerFormat = new Intl.NumberFormat("es-BO", { maximumFractionDigits: 0 });
 const priceFormat = new Intl.NumberFormat("es-BO", {
   minimumFractionDigits: 3,
   maximumFractionDigits: 3,
 });
-const volumeFormat = new Intl.NumberFormat("es-BO", { maximumFractionDigits: 3 });
+const tcoFormat = new Intl.NumberFormat("es-BO", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 const percentFormat = new Intl.NumberFormat("es-BO", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -35,111 +68,20 @@ const compactFormat = new Intl.NumberFormat("es-BO", {
   maximumFractionDigits: 2,
 });
 const timeZone = "America/La_Paz";
-const shortDateFormat = new Intl.DateTimeFormat("es-BO", {
-  timeZone,
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
 const fullDateFormat = new Intl.DateTimeFormat("es-BO", {
-  timeZone,
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
+  timeZone, day: "2-digit", month: "short", year: "numeric",
+  hour: "2-digit", minute: "2-digit", hour12: false,
 });
-const clockFormat = new Intl.DateTimeFormat("es-BO", {
-  timeZone,
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
+const shortDateFormat = new Intl.DateTimeFormat("es-BO", {
+  timeZone, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false,
 });
-const dayFormat = new Intl.DateTimeFormat("es-BO", {
-  timeZone,
-  day: "2-digit",
-  month: "short",
-});
+const dayFormat = new Intl.DateTimeFormat("es-BO", { timeZone, day: "2-digit", month: "short" });
 
 const $ = (selector) => document.querySelector(selector);
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 
-/* ------------------------------------------------------------------ boot -- */
-
-const RING_LENGTH = 276.5;
-const boot = {
-  root: $("#boot"),
-  bar: $("#boot-bar-fill"),
-  percent: $("#boot-pct"),
-  step: $("#boot-step"),
-  log: $("#boot-log"),
-  rings: [...document.querySelectorAll(".ring-value")],
-  startedAt: performance.now(),
-  value: 0,
-  finished: false,
-};
-
-function bootLog(message) {
-  if (!boot.root) return;
-  const item = document.createElement("li");
-  item.textContent = message;
-  boot.log.append(item);
-  while (boot.log.children.length > 4) boot.log.firstElementChild.remove();
-}
-
-function bootProgress(value, step, message) {
-  if (!boot.root || value < boot.value) return;
-  boot.value = value;
-  boot.bar.style.width = `${boot.value}%`;
-  boot.percent.textContent = `${Math.round(boot.value)}%`;
-  boot.rings.forEach((ring) => {
-    ring.style.strokeDashoffset = String(RING_LENGTH * (1 - boot.value / 100));
-  });
-  if (step) boot.step.textContent = step;
-  if (message) bootLog(message);
-}
-
-const logosReady = Promise.all(
-  [...document.querySelectorAll(".boot-coin img")].map((image) => (
-    image.complete
-      ? Promise.resolve()
-      : new Promise((resolve) => {
-        image.addEventListener("load", resolve, { once: true });
-        image.addEventListener("error", resolve, { once: true });
-      })
-  )),
-);
-
-async function finishBoot() {
-  if (boot.finished || !boot.root) return;
-  boot.finished = true;
-  await logosReady;
-  bootProgress(100, "Mercado listo", "render completo");
-  const wait = Math.max(0, 1500 - (performance.now() - boot.startedAt));
-  window.setTimeout(() => {
-    boot.root.classList.add("is-complete");
-    window.setTimeout(() => {
-      boot.root.remove();
-      boot.root = null;
-    }, 680);
-  }, wait);
-}
-
-function startBootSequence() {
-  if (!boot.root) return;
-  bootProgress(8, "Iniciando núcleo", "boot p2p-nowcast");
-  bootProgress(18, "Enlazando fuentes", "binance p2p · bybit p2p");
-  logosReady.then(() => {
-    $("#boot-coin-usdt").classList.add("is-live");
-    window.setTimeout(() => $("#boot-coin-usdc")?.classList.add("is-live"), 170);
-  });
-  window.setTimeout(finishBoot, 6000);
-}
-
 /* --------------------------------------------------------------- ajustes -- */
+/* Solo preferencias de vista. Ningun dato de mercado se guarda en el navegador. */
 
 const STORE_KEY = "p2p-nowcast-view";
 
@@ -155,6 +97,11 @@ function restorePreferences() {
   else state.frequency = allowedFrequencies[state.asset][0];
   if (allowedRanges.includes(saved.rangeDays)) state.rangeDays = saved.rangeDays;
   if (typeof saved.showVolume === "boolean") state.showVolume = saved.showVolume;
+  if (saved.visible && typeof saved.visible === "object") {
+    Object.keys(state.visible).forEach((key) => {
+      if (typeof saved.visible[key] === "boolean") state.visible[key] = saved.visible[key];
+    });
+  }
 }
 
 function savePreferences() {
@@ -164,6 +111,7 @@ function savePreferences() {
       frequency: state.frequency,
       rangeDays: state.rangeDays,
       showVolume: state.showVolume,
+      visible: state.visible,
     }));
   } catch (error) {
     /* almacenamiento no disponible */
@@ -193,6 +141,40 @@ async function loadMarket(asset, frequency) {
     displaySides.map((side) => loadSeries(asset, side, frequency)),
   );
   return Object.fromEntries(displaySides.map((side, index) => [side.key, payloads[index]]));
+}
+
+/* El CSV se consume tal cual: una fila por fecha de vigencia con los valores de
+   compra y venta ya publicados. No se interpola ni se arrastra ningun valor. */
+async function loadTco() {
+  const response = await fetch(`${TCO_URL}?v=${Date.now()}`, { cache: "no-store" });
+  if (!response.ok) throw new Error("No se pudo cargar el tipo de cambio oficial");
+  const text = await response.text();
+  const lines = text.trim().split(/\r?\n/);
+  const header = lines[0].split(",").map((item) => item.trim());
+  const iVig = header.indexOf("vigencia");
+  const iCompra = header.indexOf("tco_compra");
+  const iVenta = header.indexOf("tco_venta");
+  if (iVig < 0 || iCompra < 0 || iVenta < 0) {
+    throw new Error("El CSV oficial no tiene las columnas esperadas");
+  }
+
+  const map = new Map();
+  let latest = null;
+  lines.slice(1).forEach((line) => {
+    const cells = line.split(",");
+    const vigencia = (cells[iVig] || "").trim();
+    if (!vigencia) return;
+    const compra = (cells[iCompra] || "").trim();
+    const venta = (cells[iVenta] || "").trim();
+    const entry = {
+      vigencia,
+      compra: compra === "" ? null : Number(compra),
+      venta: venta === "" ? null : Number(venta),
+    };
+    map.set(vigencia, entry);
+    if (!latest || vigencia > latest.vigencia) latest = entry;
+  });
+  return { map, latest };
 }
 
 function buildRows(market, rangeDays) {
@@ -247,56 +229,6 @@ function summarizeSide(rows, side) {
   };
 }
 
-/* --------------------------------------------------------------- métricas -- */
-
-function renderDelta(node, change) {
-  node.classList.remove("up", "down");
-  if (change == null) {
-    node.textContent = "—";
-    return;
-  }
-  node.classList.add(change >= 0 ? "up" : "down");
-  node.textContent = `${change >= 0 ? "▲" : "▼"} ${percentFormat.format(Math.abs(change))} %`;
-}
-
-function renderMetrics(rows) {
-  $("#price-title").textContent = `Precio del ${state.asset} · Bs.`;
-  $("#volume-title").textContent = `Volumen estimado · ${state.asset}`;
-
-  const summaries = {};
-  displaySides.forEach((side) => {
-    const summary = summarizeSide(rows, side);
-    summaries[side.slug] = summary;
-    $(`#metric-price-${side.slug}`).textContent = summary.price == null
-      ? "—"
-      : priceFormat.format(summary.price);
-    $(`#metric-volume-${side.slug}`).textContent = compactFormat.format(summary.volume);
-    $(`#metric-transactions-${side.slug}`).textContent = integerFormat.format(summary.transactions);
-    renderDelta($(`#delta-${side.slug}`), summary.change);
-  });
-
-  const venta = summaries.venta.price;
-  const compra = summaries.compra.price;
-  if (venta == null || compra == null) {
-    $("#metric-spread").textContent = "—";
-    $("#metric-spread-pct").textContent = "Sin precios en el rango";
-    return;
-  }
-  const spread = Number(venta) - Number(compra);
-  $("#metric-spread").textContent = priceFormat.format(spread);
-  $("#metric-spread-pct").textContent = Number(compra) === 0
-    ? "—"
-    : `${percentFormat.format((spread / Number(compra)) * 100)} % sobre el precio de compra`;
-}
-
-/* --------------------------------------------------------------- gráfico -- */
-
-function svgElement(name, attributes = {}) {
-  const element = document.createElementNS("http://www.w3.org/2000/svg", name);
-  Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, value));
-  return element;
-}
-
 function downsampleRows(rows, maxPoints) {
   if (rows.length <= maxPoints) return rows;
   const step = Math.ceil(rows.length / maxPoints);
@@ -325,486 +257,661 @@ function downsampleRows(rows, maxPoints) {
   return sampled;
 }
 
-function nearestRowIndex(rows, targetTime) {
-  let closest = 0;
-  let distance = Number.POSITIVE_INFINITY;
-  rows.forEach((row, index) => {
-    const current = Math.abs(Date.parse(row.timestamp_utc) - targetTime);
-    if (current < distance) {
-      distance = current;
-      closest = index;
-    }
+/* Aplana una fila a la forma que consume el grafico. El TCO se resuelve por la
+   fecha boliviana del propio punto; si esa fecha no esta publicada, queda vacia. */
+function flattenRow(row) {
+  const buy = row.sides.BUY;
+  const sell = row.sides.SELL;
+  const stamp = buy?.timestamp_bo || sell?.timestamp_bo || "";
+  const official = state.tco.get(stamp.slice(0, 10)) || null;
+  return {
+    time: Date.parse(row.timestamp_utc),
+    p2pVenta: buy?.vwap_bob ?? null,
+    p2pCompra: sell?.vwap_bob ?? null,
+    tcoVenta: official?.venta ?? null,
+    tcoCompra: official?.compra ?? null,
+    volVenta: Number(buy?.volume_asset || 0),
+    volCompra: Number(sell?.volume_asset || 0),
+    txVenta: Number(buy?.validated_events || 0),
+    txCompra: Number(sell?.validated_events || 0),
+  };
+}
+
+/* --------------------------------------------------------------- métricas -- */
+
+function renderDelta(node, change) {
+  node.classList.remove("up", "down");
+  if (change == null) {
+    node.textContent = "—";
+    return;
+  }
+  node.classList.add(change >= 0 ? "up" : "down");
+  node.textContent = `${change >= 0 ? "▲" : "▼"} ${percentFormat.format(Math.abs(change))} %`;
+}
+
+function renderMetrics(rows) {
+  $("#volume-unit").textContent = state.asset;
+
+  const summaries = {};
+  displaySides.forEach((side) => {
+    const summary = summarizeSide(rows, side);
+    summaries[side.slug] = summary;
+    $(`#metric-price-${side.slug}`).textContent = summary.price == null
+      ? "—"
+      : priceFormat.format(summary.price);
+    $(`#metric-volume-${side.slug}`).textContent = compactFormat.format(summary.volume);
+    $(`#metric-transactions-${side.slug}`).textContent = integerFormat.format(summary.transactions);
+    renderDelta($(`#delta-${side.slug}`), summary.change);
   });
-  return closest;
+
+  const venta = summaries.venta.price;
+  const compra = summaries.compra.price;
+  if (venta == null || compra == null) {
+    $("#metric-spread").textContent = "—";
+    $("#metric-spread-pct").textContent = "Sin precios en el rango";
+  } else {
+    const spread = Number(venta) - Number(compra);
+    $("#metric-spread").textContent = priceFormat.format(spread);
+    $("#metric-spread-pct").textContent = Number(compra) === 0
+      ? "—"
+      : `${percentFormat.format((spread / Number(compra)) * 100)} % sobre el precio de compra`;
+  }
+
+  const official = state.tcoLatest;
+  const stamp = official ? `Vigencia ${dayFormat.format(new Date(`${official.vigencia}T12:00:00Z`))}` : "";
+  $("#metric-tco-venta").textContent = official?.venta == null ? "—" : tcoFormat.format(official.venta);
+  $("#metric-tco-compra").textContent = official?.compra == null ? "—" : tcoFormat.format(official.compra);
+  $("#metric-tco-venta-note").textContent = official ? stamp : "Banco Central de Bolivia";
+  $("#metric-tco-compra-note").textContent = official ? stamp : "Banco Central de Bolivia";
 }
 
-function tickFormatter(timeSpan) {
-  if (timeSpan <= 40 * 3_600_000) return clockFormat;
-  return timeSpan <= 8 * 86_400_000 ? shortDateFormat : dayFormat;
+/* --------------------------------------------------------------- gráfico -- */
+
+function svgElement(name, attributes = {}) {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", name);
+  Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, value));
+  return element;
 }
 
-function renderTooltip(rows, index) {
-  const row = rows[index];
-  const previous = rows[index - 1];
-  const lines = displaySides.map((side) => {
-    const point = row.sides[side.key];
-    const price = point?.vwap_bob == null
-      ? "Sin precio"
-      : `Bs. ${priceFormat.format(point.vwap_bob)}`;
-    const before = previous?.sides[side.key]?.vwap_bob;
-    const move = point?.vwap_bob != null && before != null
-      ? Number(point.vwap_bob) - Number(before)
-      : null;
-    const moveText = move == null || move === 0
-      ? ""
-      : ` · ${move > 0 ? "▲" : "▼"} ${priceFormat.format(Math.abs(move))}`;
-    const volume = volumeFormat.format(Number(point?.volume_asset || 0));
-    const transactions = integerFormat.format(Number(point?.validated_events || 0));
-    return `
-      <div class="tooltip-side ${side.slug}">
-        <span><i></i>${side.label}${moveText}</span>
-        <strong>${price}</strong>
-        <small>${volume} ${state.asset} · ${transactions} transacciones</small>
-      </div>`;
-  }).join("");
-  return `<time>${shortDateFormat.format(new Date(row.timestamp_utc))}</time>${lines}`;
+function chartGeometry(points, width, height) {
+  const withVolume = state.showVolume;
+  const padLeft = 8;
+  const padRight = 58;
+  const padTop = 14;
+  const padBottom = 26;
+  const volumeHeight = withVolume ? Math.round(height * 0.24) : 0;
+  const priceTop = padTop;
+  const priceBottom = height - padBottom - (withVolume ? volumeHeight + 24 : 0);
+
+  const activeSeries = SERIES.filter((serie) => state.visible[serie.id]);
+  const values = [];
+  points.forEach((point) => {
+    activeSeries.forEach((serie) => {
+      const value = point[serie.id];
+      if (value != null && Number.isFinite(Number(value))) values.push(Number(value));
+    });
+  });
+
+  let low = values.length ? Math.min(...values) : 0;
+  let high = values.length ? Math.max(...values) : 1;
+  if (low === high) { low -= 0.05; high += 0.05; }
+  const margin = (high - low) * 0.12;
+  low -= margin;
+  high += margin;
+
+  const span = Math.max(points.length - 1, 1);
+  const xOf = (index) => padLeft + (index / span) * (width - padLeft - padRight);
+  const yOf = (value) => priceBottom - ((Number(value) - low) / (high - low)) * (priceBottom - priceTop);
+
+  const maxVolume = withVolume
+    ? Math.max(1, ...points.map((point) => Math.max(point.volVenta, point.volCompra)))
+    : 1;
+  const volumeBase = height - padBottom;
+  const yVol = (value) => volumeBase - (value / maxVolume) * volumeHeight;
+
+  return { xOf, yOf, yVol, low, high, priceTop, priceBottom, volumeBase, volumeHeight, padRight, withVolume, activeSeries };
 }
 
-function renderChart(sourceRows, { animate = false } = {}) {
+function linePath(points, geo, key) {
+  let path = "";
+  let open = false;
+  points.forEach((point, index) => {
+    const value = point[key];
+    if (value == null || !Number.isFinite(Number(value))) { open = false; return; }
+    const command = open ? "L" : "M";
+    path += `${command}${geo.xOf(index).toFixed(1)} ${geo.yOf(value).toFixed(1)} `;
+    open = true;
+  });
+  return path.trim();
+}
+
+function gapPath(points, geo, upper, lower) {
+  const top = [];
+  const bottom = [];
+  points.forEach((point, index) => {
+    const a = point[upper];
+    const b = point[lower];
+    if (a == null || b == null) return;
+    top.push(`${geo.xOf(index).toFixed(1)} ${geo.yOf(a).toFixed(1)}`);
+    bottom.push(`${geo.xOf(index).toFixed(1)} ${geo.yOf(b).toFixed(1)}`);
+  });
+  if (top.length < 2) return "";
+  return `M${top.join(" L")} L${bottom.reverse().join(" L")} Z`;
+}
+
+function renderChart(points) {
   const svg = $("#market-chart");
   const wrap = $("#chart-wrap");
-  const tooltip = $("#chart-tooltip");
-  const empty = $("#empty-state");
+  wrap.classList.toggle("no-volume", !state.showVolume);
+  svg.textContent = "";
 
-  const maxChartPoints = clamp(Math.floor(wrap.clientWidth / 3.4), 120, 460);
-  const rows = downsampleRows(sourceRows, maxChartPoints);
-  const pricedValues = rows.flatMap((row) => displaySides
-    .map((side) => row.sides[side.key]?.vwap_bob)
-    .filter((value) => value != null)
-    .map(Number));
-
-  svg.replaceChildren();
-  svg.classList.remove("is-fresh");
-  tooltip.hidden = true;
-  const hasPrice = pricedValues.length > 0;
-  wrap.classList.toggle("is-empty", !hasPrice);
-  empty.hidden = hasPrice;
-  if (!hasPrice) return;
-
-  const width = Math.max(320, wrap.clientWidth);
-  const height = Math.max(300, wrap.clientHeight);
+  const width = svg.clientWidth || wrap.clientWidth || 600;
+  const height = svg.clientHeight || 360;
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  if (animate) svg.classList.add("is-fresh");
+  if (!points.length) return;
 
-  const volumes = rows.map((row) => Object.fromEntries(displaySides.map((side) => [
-    side.key,
-    Number(row.sides[side.key]?.volume_asset || 0),
-  ])));
-  const maxVolume = Math.max(
-    ...volumes.flatMap((rowVolumes) => displaySides.map((side) => rowVolumes[side.key])),
-    0,
-  );
-  const showVolume = state.showVolume && maxVolume > 0;
+  const geo = chartGeometry(points, width, height);
 
-  const compact = width < 560;
-  const margin = { top: 26, right: compact ? 58 : 78, bottom: 28, left: compact ? 6 : 10 };
-  const volumeHeight = showVolume ? (compact ? 64 : 84) : 0;
-  const volumeGap = showVolume ? 24 : 0;
-  const priceBottom = height - margin.bottom - volumeHeight - volumeGap;
-  const priceHeight = priceBottom - margin.top;
-  const volumeTop = priceBottom + volumeGap;
-  const chartWidth = width - margin.left - margin.right;
-  const startTime = Date.parse(rows[0].timestamp_utc);
-  const endTime = Date.parse(rows.at(-1).timestamp_utc);
-  const timeSpan = Math.max(endTime - startTime, 1);
-  const x = (row) => margin.left
-    + ((Date.parse(row.timestamp_utc) - startTime) / timeSpan) * chartWidth;
-
-  let priceMin = Math.min(...pricedValues);
-  let priceMax = Math.max(...pricedValues);
-  const padding = Math.max((priceMax - priceMin) * 0.16, priceMax * 0.0025, 0.01);
-  priceMin -= padding;
-  priceMax += padding;
-  const y = (price) => margin.top
-    + (1 - (price - priceMin) / Math.max(priceMax - priceMin, 0.0001)) * priceHeight;
-
-  const defs = svgElement("defs");
-  displaySides.forEach((side) => {
-    const gradient = svgElement("linearGradient", {
-      id: `area-${side.slug}`,
-      x1: 0,
-      y1: 0,
-      x2: 0,
-      y2: 1,
+  /* etiquetas del borde derecho: se calculan primero y se separan entre si para
+     que nunca queden encimadas cuando dos series comparten nivel */
+  const edge = [];
+  geo.activeSeries.forEach((serie) => {
+    let lastIndex = -1;
+    points.forEach((point, index) => {
+      if (point[serie.id] != null && Number.isFinite(Number(point[serie.id]))) lastIndex = index;
     });
-    gradient.append(
-      svgElement("stop", {
-        offset: "0%",
-        "stop-color": `var(--${side.slug})`,
-        "stop-opacity": 0.22,
-      }),
-      svgElement("stop", {
-        offset: "100%",
-        "stop-color": `var(--${side.slug})`,
-        "stop-opacity": 0,
-      }),
-    );
-    defs.append(gradient);
+    if (lastIndex < 0) return;
+    const value = Number(points[lastIndex][serie.id]);
+    edge.push({ serie, value, index: lastIndex, y: geo.yOf(value), anchor: geo.yOf(value) });
   });
-  svg.append(defs);
+  edge.sort((a, b) => a.y - b.y);
+  const GAP = 14;
+  for (let i = 1; i < edge.length; i += 1) {
+    if (edge[i].y - edge[i - 1].y < GAP) edge[i].y = edge[i - 1].y + GAP;
+  }
+  const overflow = edge.length ? edge.at(-1).y - (height - 6) : 0;
+  if (overflow > 0) edge.forEach((item) => { item.y -= overflow; });
 
-  for (let index = 0; index <= 4; index += 1) {
-    const lineY = margin.top + (index / 4) * priceHeight;
-    svg.append(svgElement("line", {
-      x1: margin.left,
-      y1: lineY,
-      x2: width - margin.right,
-      y2: lineY,
-      class: index === 4 ? "grid-line base" : "grid-line",
+  /* rejilla y niveles */
+  const gridGroup = svgElement("g");
+  for (let step = 0; step <= 4; step += 1) {
+    const value = geo.low + ((geo.high - geo.low) * step) / 4;
+    const y = geo.yOf(value);
+    gridGroup.append(svgElement("line", {
+      x1: 0, x2: width - geo.padRight + 4, y1: y.toFixed(1), y2: y.toFixed(1),
+      stroke: "rgba(126,231,178,.07)", "stroke-width": 1,
     }));
+    if (edge.some((item) => Math.abs(item.y - y) < GAP)) continue;
     const label = svgElement("text", {
-      x: width - margin.right + 9,
-      y: lineY + 3.5,
-      class: "axis-text right",
+      x: width - geo.padRight + 10, y: (y + 3.5).toFixed(1),
+      fill: "#6d857c", "font-size": 11, "font-family": "JetBrains Mono, monospace",
     });
-    label.textContent = priceFormat.format(priceMax - (index / 4) * (priceMax - priceMin));
-    svg.append(label);
+    label.textContent = tcoFormat.format(value);
+    gridGroup.append(label);
+  }
+  svg.append(gridGroup);
+
+  /* sombreado de la distancia entre P2P Venta y TCO Venta (solo visual) */
+  if (state.visible.p2pVenta && state.visible.tcoVenta) {
+    const shade = gapPath(points, geo, "p2pVenta", "tcoVenta");
+    if (shade) {
+      svg.append(svgElement("path", { d: shade, fill: "rgba(53,224,139,.10)", stroke: "none" }));
+    }
   }
 
-  const tickCount = clamp(Math.floor(chartWidth / (compact ? 96 : 132)), 2, 6);
-  const formatTick = tickFormatter(timeSpan);
-  for (let index = 0; index <= tickCount; index += 1) {
-    const ratio = index / tickCount;
-    let anchor = "center";
-    if (index === 0) anchor = "start";
-    else if (index === tickCount) anchor = "end";
-    const label = svgElement("text", {
-      x: margin.left + ratio * chartWidth,
-      y: height - 9,
-      class: `axis-text ${anchor}`,
-    });
-    label.textContent = formatTick.format(new Date(startTime + ratio * timeSpan));
-    svg.append(label);
-  }
-
-  if (showVolume) {
-    const panelLabel = svgElement("text", {
-      x: margin.left + 2,
-      y: volumeTop - 8,
-      class: "panel-label",
-    });
-    panelLabel.textContent = `VOLUMEN ${state.asset}`;
-    svg.append(panelLabel);
-
-    const peak = svgElement("text", {
-      x: width - margin.right + 9,
-      y: volumeTop + 6,
-      class: "axis-text right",
-    });
-    peak.textContent = compactFormat.format(maxVolume);
-    svg.append(peak);
-
-    svg.append(svgElement("line", {
-      x1: margin.left,
-      y1: volumeTop + volumeHeight,
-      x2: width - margin.right,
-      y2: volumeTop + volumeHeight,
-      class: "grid-line base",
-    }));
-
-    const slotWidth = chartWidth / Math.max(rows.length, 1);
-    const clusterWidth = clamp(slotWidth * 0.9, 5, 16);
-    const barGap = 0.9;
-    const barWidth = Math.max(2, (clusterWidth - barGap) / displaySides.length);
-    const groupWidth = barWidth * displaySides.length + barGap;
-    rows.forEach((row, rowIndex) => {
-      displaySides.forEach((side, sideIndex) => {
-        const volume = volumes[rowIndex][side.key];
-        if (volume <= 0) return;
-        const barHeight = Math.max(1.4, (volume / maxVolume) * volumeHeight);
-        svg.append(svgElement("rect", {
-          x: x(row) - groupWidth / 2 + sideIndex * (barWidth + barGap),
-          y: volumeTop + volumeHeight - barHeight,
-          width: barWidth,
-          height: barHeight,
-          rx: Math.min(1.6, barWidth / 3),
-          class: `volume-bar ${side.slug}`,
+  /* barras de volumen */
+  if (geo.withVolume) {
+    const density = points.length;
+    const slot = (width - 8 - geo.padRight) / Math.max(density, 1);
+    const barWidth = clamp(slot * 0.42, 1.5, 13);
+    const volumeGroup = svgElement("g");
+    points.forEach((point, index) => {
+      const x = geo.xOf(index);
+      [["volVenta", "#35e08b", -1], ["volCompra", "#46c8ea", 1]].forEach(([key, color, dir]) => {
+        const value = point[key];
+        if (!value) return;
+        const y = geo.yVol(value);
+        volumeGroup.append(svgElement("rect", {
+          x: (x + dir * barWidth * 0.52 - barWidth / 2).toFixed(1),
+          y: y.toFixed(1),
+          width: barWidth.toFixed(1),
+          height: Math.max(1.5, geo.volumeBase - y).toFixed(1),
+          fill: color, opacity: .55, rx: Math.min(2, barWidth / 3),
         }));
       });
     });
+    svg.append(volumeGroup);
+    svg.append(svgElement("line", {
+      x1: 0, x2: width - geo.padRight + 4, y1: geo.volumeBase, y2: geo.volumeBase,
+      stroke: "rgba(126,231,178,.10)", "stroke-width": 1,
+    }));
   }
 
-  const lastTags = [];
-  displaySides.forEach((side) => {
-    const validRows = rows.filter((row) => row.sides[side.key]?.vwap_bob != null);
-    if (!validRows.length) return;
-
-    const points = validRows.map((row) => (
-      `${x(row).toFixed(2)},${y(Number(row.sides[side.key].vwap_bob)).toFixed(2)}`
-    ));
+  /* series */
+  geo.activeSeries.forEach((serie) => {
+    const d = linePath(points, geo, serie.id);
+    if (!d) return;
     svg.append(svgElement("path", {
-      d: `M${points[0]} L${points.join(" L")} L${x(validRows.at(-1)).toFixed(2)},${priceBottom} L${x(validRows[0]).toFixed(2)},${priceBottom} Z`,
-      class: `price-area ${side.slug}`,
-    }));
-    svg.append(svgElement("path", {
-      d: `M${points.join(" L")}`,
-      pathLength: 1,
-      class: `price-line ${side.slug}`,
+      d,
+      fill: "none",
+      stroke: serie.color,
+      "stroke-width": serie.width,
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      ...(serie.dash ? { "stroke-dasharray": serie.dash } : {}),
     }));
 
-    const observedRows = validRows.filter((row) => row.sides[side.key].price_observed);
-    const dotStep = Math.max(1, Math.ceil(observedRows.length / 80));
-    observedRows.filter((_, index) => index % dotStep === 0).forEach((row) => {
+    const marker = edge.find((item) => item.serie.id === serie.id);
+    if (marker && !serie.dash) {
       svg.append(svgElement("circle", {
-        cx: x(row),
-        cy: y(Number(row.sides[side.key].vwap_bob)),
-        r: 2.3,
-        class: `observed-dot ${side.slug}`,
+        cx: geo.xOf(marker.index).toFixed(1), cy: marker.anchor.toFixed(1), r: 3.4, fill: serie.color,
       }));
-    });
-
-    const lastValue = Number(validRows.at(-1).sides[side.key].vwap_bob);
-    lastTags.push({ side, value: lastValue, y: clamp(y(lastValue), margin.top + 9, priceBottom - 9) });
+    }
   });
 
-  if (lastTags.length === 2 && Math.abs(lastTags[0].y - lastTags[1].y) < 19) {
-    const [upper, lower] = [...lastTags].sort((left, right) => left.y - right.y);
-    const shift = (19 - (lower.y - upper.y)) / 2;
-    upper.y = Math.max(margin.top + 9, upper.y - shift);
-    lower.y = Math.min(priceBottom - 9, lower.y + shift);
-  }
-  lastTags.forEach((tag) => {
-    const group = svgElement("g", { class: `last-tag ${tag.side.slug}` });
-    group.append(svgElement("rect", {
-      x: width - margin.right + 4,
-      y: tag.y - 9,
-      width: margin.right - 10,
-      height: 18,
-      rx: 5,
+  /* etiquetas del ultimo valor, ya separadas */
+  edge.forEach((item) => {
+    const text = tcoFormat.format(item.value);
+    const x = width - geo.padRight + 6;
+    svg.append(svgElement("rect", {
+      x: x.toFixed(1), y: (item.y - 8).toFixed(1),
+      width: Math.max(38, text.length * 7.2), height: 16, rx: 4,
+      fill: "rgba(7,22,19,.9)", stroke: item.serie.color, "stroke-width": .8, opacity: .96,
     }));
-    const text = svgElement("text", {
-      x: width - margin.right + 4 + (margin.right - 10) / 2,
-      y: tag.y + 3.5,
+    const tag = svgElement("text", {
+      x: (x + 5).toFixed(1), y: (item.y + 3.6).toFixed(1),
+      fill: item.serie.color, "font-size": 11, "font-weight": 700,
+      "font-family": "JetBrains Mono, monospace",
     });
-    text.textContent = priceFormat.format(tag.value);
-    group.append(text);
-    svg.append(group);
+    tag.textContent = text;
+    svg.append(tag);
   });
 
-  const cursor = svgElement("line", {
-    y1: margin.top,
-    y2: showVolume ? volumeTop + volumeHeight : priceBottom,
-    class: "cursor-line",
+  /* eje temporal: si el rango abarca poco tiempo se muestra la hora */
+  const spanMs = points.at(-1).time - points[0].time;
+  const useClock = spanMs <= 3 * 86_400_000;
+  const ticks = Math.min(5, points.length);
+  const axisGroup = svgElement("g");
+  const seen = [];
+  for (let index = 0; index < ticks; index += 1) {
+    const position = Math.round((index / Math.max(ticks - 1, 1)) * (points.length - 1));
+    const date = new Date(points[position].time);
+    let text = useClock ? shortDateFormat.format(date) : dayFormat.format(date);
+    if (!useClock && seen.includes(text)) text = shortDateFormat.format(date);
+    seen.push(text);
+    const label = svgElement("text", {
+      x: geo.xOf(position).toFixed(1),
+      y: height - 8,
+      fill: "#6d857c",
+      "font-size": 11,
+      "text-anchor": index === 0 ? "start" : index === ticks - 1 ? "end" : "middle",
+    });
+    label.textContent = text;
+    axisGroup.append(label);
+  }
+  svg.append(axisGroup);
+
+  /* crosshair */
+  const crosshair = svgElement("line", {
+    id: "crosshair", x1: 0, x2: 0, y1: geo.priceTop - 6, y2: geo.volumeBase,
+    stroke: "rgba(238,246,242,.28)", "stroke-width": 1, "stroke-dasharray": "3 3",
     visibility: "hidden",
   });
-  svg.append(cursor);
+  svg.append(crosshair);
 
-  const focusDots = Object.fromEntries(displaySides.map((side) => {
-    const dot = svgElement("circle", { r: 4, class: `focus-dot ${side.slug}`, visibility: "hidden" });
-    svg.append(dot);
-    return [side.key, dot];
-  }));
+  svg.__geo = geo;
+  svg.__points = points;
+}
 
-  const hideCursor = () => {
-    cursor.setAttribute("visibility", "hidden");
-    Object.values(focusDots).forEach((dot) => dot.setAttribute("visibility", "hidden"));
-    tooltip.hidden = true;
-  };
+/* --------------------------------------------------------------- tooltip -- */
 
-  const moveCursor = (event) => {
-    const bounds = svg.getBoundingClientRect();
-    const pointerX = ((event.clientX - bounds.left) / bounds.width) * width;
-    const ratio = clamp((pointerX - margin.left) / chartWidth, 0, 1);
-    const index = nearestRowIndex(rows, startTime + ratio * timeSpan);
-    const row = rows[index];
-    const cursorX = x(row);
+function hideTooltip() {
+  $("#chart-tooltip").hidden = true;
+  const crosshair = document.getElementById("crosshair");
+  if (crosshair) crosshair.setAttribute("visibility", "hidden");
+}
 
-    cursor.setAttribute("x1", cursorX);
-    cursor.setAttribute("x2", cursorX);
-    cursor.setAttribute("visibility", "visible");
+function showTooltip(event) {
+  const svg = $("#market-chart");
+  const points = svg.__points;
+  const geo = svg.__geo;
+  if (!points || !points.length || !geo) return;
 
-    displaySides.forEach((side) => {
-      const price = row.sides[side.key]?.vwap_bob;
-      const dot = focusDots[side.key];
-      if (price == null) {
-        dot.setAttribute("visibility", "hidden");
-        return;
-      }
-      dot.setAttribute("cx", cursorX);
-      dot.setAttribute("cy", y(Number(price)));
-      dot.setAttribute("visibility", "visible");
-    });
-
-    tooltip.innerHTML = renderTooltip(rows, index);
-    tooltip.hidden = false;
-    const tooltipWidth = tooltip.offsetWidth;
-    const anchor = (cursorX / width) * wrap.clientWidth;
-    tooltip.style.left = `${clamp(anchor - tooltipWidth / 2, 8, Math.max(8, wrap.clientWidth - tooltipWidth - 8))}px`;
-    tooltip.style.top = `${margin.top - 6}px`;
-  };
-
-  const interaction = svgElement("rect", {
-    x: margin.left,
-    y: margin.top,
-    width: chartWidth,
-    height: (showVolume ? volumeTop + volumeHeight : priceBottom) - margin.top,
-    fill: "transparent",
+  const rect = svg.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  let index = 0;
+  let best = Infinity;
+  points.forEach((point, position) => {
+    const distance = Math.abs(geo.xOf(position) - x);
+    if (distance < best) { best = distance; index = position; }
   });
-  interaction.addEventListener("pointermove", moveCursor);
-  interaction.addEventListener("pointerdown", moveCursor);
-  interaction.addEventListener("pointerleave", hideCursor);
-  svg.append(interaction);
+
+  const point = points[index];
+  const crosshair = document.getElementById("crosshair");
+  if (crosshair) {
+    crosshair.setAttribute("x1", geo.xOf(index).toFixed(1));
+    crosshair.setAttribute("x2", geo.xOf(index).toFixed(1));
+    crosshair.setAttribute("visibility", "visible");
+  }
+
+  const rows = [];
+  SERIES.forEach((serie) => {
+    if (!state.visible[serie.id]) return;
+    const value = point[serie.id];
+    if (value == null || !Number.isFinite(Number(value))) return;
+    rows.push(`<div class="tip-row"><span><i class="dot" style="background:${serie.color}"></i>${serie.label}</span><b>Bs ${priceFormat.format(value)}</b></div>`);
+  });
+  if (state.showVolume && (point.volVenta || point.volCompra)) {
+    rows.push(`<div class="tip-row"><span>Vol. estimado</span><b>${compactFormat.format(point.volVenta + point.volCompra)} ${state.asset}</b></div>`);
+  }
+  if (point.txVenta || point.txCompra) {
+    rows.push(`<div class="tip-row"><span>Trans. estimadas</span><b>${integerFormat.format(point.txVenta + point.txCompra)}</b></div>`);
+  }
+
+  const tooltip = $("#chart-tooltip");
+  tooltip.innerHTML = `<h4>${fullDateFormat.format(new Date(point.time))}</h4>${rows.join("")}`;
+  tooltip.hidden = false;
+
+  const wrapWidth = $("#chart-wrap").clientWidth;
+  const tipWidth = tooltip.offsetWidth;
+  tooltip.style.left = `${clamp(geo.xOf(index) + 14, 4, Math.max(4, wrapWidth - tipWidth - 4))}px`;
+  tooltip.style.top = `${clamp(event.clientY - rect.top - 20, 4, rect.height - tooltip.offsetHeight - 4)}px`;
 }
 
-/* ---------------------------------------------------------------- vistas -- */
+/* --------------------------------------------------------------- estados -- */
 
-function setActive(container, attribute, value) {
-  container.querySelectorAll("button").forEach((button) => {
-    button.classList.toggle("active", button.dataset[attribute] === String(value));
+function setStatus(mode, text) {
+  const pill = $("#data-status");
+  pill.classList.remove("is-ok", "is-error", "is-loading");
+  if (mode) pill.classList.add(`is-${mode}`);
+  $("#data-status-text").textContent = text;
+}
+
+function relativeLabel(iso) {
+  const minutes = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if (!Number.isFinite(minutes) || minutes < 0) return "";
+  if (minutes < 1) return "Actualizado hace menos de 1 min";
+  if (minutes < 60) return `Actualizado hace ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Actualizado hace ${hours} h`;
+  return `Actualizado hace ${Math.floor(hours / 24)} d`;
+}
+
+function showLoading() {
+  state.loading = true;
+  setStatus("loading", "Cargando");
+  $("#chart-skeleton").hidden = false;
+  $("#empty-state").hidden = true;
+  $("#error-state").hidden = true;
+  $("#refresh-btn").classList.add("is-busy");
+  hideTooltip();
+
+  /* la captura anterior no se conserva en pantalla */
+  $("#market-chart").textContent = "";
+  ["#metric-price-venta", "#metric-price-compra", "#metric-tco-venta", "#metric-tco-compra",
+    "#metric-spread", "#metric-volume-venta", "#metric-volume-compra",
+    "#metric-transactions-venta", "#metric-transactions-compra"].forEach((id) => {
+    $(id).textContent = "—";
+  });
+  ["#delta-venta", "#delta-compra"].forEach((id) => {
+    $(id).textContent = "—";
+    $(id).classList.remove("up", "down");
+  });
+  $("#metric-spread-pct").textContent = "—";
+  $("#as-of").textContent = "—";
+  $("#as-of-rel").textContent = "";
+  $("#foot-capture").textContent = "Última captura: —";
+}
+
+function showError(message) {
+  state.loading = false;
+  state.rows = [];
+  setStatus("error", "Sin datos");
+  $("#chart-skeleton").hidden = true;
+  $("#empty-state").hidden = true;
+  $("#error-state").hidden = false;
+  $("#error-detail").textContent = message || "No fue posible obtener la captura actual.";
+  $("#refresh-btn").classList.remove("is-busy");
+  $("#status-capture").textContent = "—";
+  $("#status-tco").textContent = "—";
+}
+
+/* -------------------------------------------------------------- controles -- */
+
+function renderFrequencySelector() {
+  const host = $("#frequency-selector");
+  host.textContent = "";
+  FREQ_OPTIONS.forEach((option) => {
+    const supported = !option.locked && allowedFrequencies[state.asset].includes(option.id);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = option.label;
+    button.dataset.frequency = option.id;
+    if (!supported) {
+      button.disabled = true;
+      button.dataset.tip = "Disponible próximamente";
+    }
+    if (supported && option.id === state.frequency) button.classList.add("active");
+    host.append(button);
   });
 }
 
-function renderFrequencyButtons() {
-  const container = $("#frequency-selector");
-  container.innerHTML = allowedFrequencies[state.asset]
-    .map((frequency) => (
-      `<button type="button" data-frequency="${frequency}" class="${frequency === state.frequency ? "active" : ""}">${frequencyLabels[frequency]}</button>`
-    ))
-    .join("");
-
-  container.querySelectorAll("button").forEach((button) => {
-    button.addEventListener("click", async () => {
-      if (state.frequency === button.dataset.frequency) return;
-      state.frequency = button.dataset.frequency;
-      setActive(container, "frequency", state.frequency);
-      savePreferences();
-      await refresh({ animate: true });
-    });
+function renderLegend() {
+  const host = $("#legend");
+  host.textContent = "";
+  SERIES.forEach((serie) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.serie = serie.id;
+    button.setAttribute("aria-pressed", String(state.visible[serie.id]));
+    button.innerHTML = `<i class="swatch${serie.dash ? " dash" : ""}" style="${serie.dash ? `color:${serie.color}` : `background:${serie.color}`}"></i>${serie.label}`;
+    host.append(button);
   });
+
+  const volume = document.createElement("button");
+  volume.type = "button";
+  volume.dataset.serie = "volume";
+  volume.setAttribute("aria-pressed", String(state.showVolume));
+  volume.innerHTML = '<i class="swatch bar" style="background:#35e08b"></i>Volumen';
+  host.append(volume);
 }
 
-function latestCapture(market) {
-  const values = displaySides
-    .map((side) => market[side.key].as_of_utc)
-    .filter(Boolean)
-    .map((value) => Date.parse(value));
-  return values.length ? new Date(Math.max(...values)) : null;
+function syncControls() {
+  document.documentElement.dataset.asset = state.asset;
+  $("#market-label").textContent = `${state.asset} / Bs.`;
+  document.querySelectorAll("#asset-selector button").forEach((button) => {
+    const active = button.dataset.asset === state.asset;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  document.querySelectorAll("#range-selector button").forEach((button) => {
+    button.classList.toggle("active", Number(button.dataset.range) === state.rangeDays);
+  });
+  renderFrequencySelector();
+  renderLegend();
 }
 
-let refreshToken = 0;
+/* ------------------------------------------------------------------ ciclo -- */
 
-async function refresh({ animate = false } = {}) {
-  const currentToken = ++refreshToken;
-  const requestedAsset = state.asset;
-  const requestedFrequency = state.frequency;
-  const status = $("#data-status");
-  const statusText = $("#data-status-text");
-  status.className = "status-pill loading";
-  statusText.textContent = "Cargando datos";
-  bootProgress(34, "Solicitando series públicas", `fetch ${requestedAsset} ${requestedFrequency}`);
+function paint() {
+  const rows = state.rows;
+  renderMetrics(rows);
+
+  const flat = downsampleRows(rows, 320).map(flattenRow);
+  const usable = flat.filter((point) => (
+    point.p2pVenta != null || point.p2pCompra != null || point.volVenta || point.volCompra
+  ));
+
+  $("#chart-skeleton").hidden = true;
+  if (!usable.length) {
+    $("#market-chart").textContent = "";
+    $("#empty-state").hidden = false;
+    return;
+  }
+  $("#empty-state").hidden = true;
+  renderChart(flat);
+}
+
+async function refresh() {
+  const token = ++state.token;
+  showLoading();
+
+  let market = null;
+  let official = null;
+  let tcoError = false;
 
   try {
-    const market = await loadMarket(requestedAsset, requestedFrequency);
-    if (currentToken !== refreshToken) return;
-    bootProgress(72, "Contrato público verificado", "10 series · ventana 30d");
-    state.rows = buildRows(market, state.rangeDays);
-    const capture = latestCapture(market);
-    $("#market-label").textContent = `${state.asset} / Bs.`;
-    $("#as-of").textContent = capture
-      ? fullDateFormat.format(capture)
-      : "Pendiente de primera ejecución";
-    renderMetrics(state.rows);
-    renderChart(state.rows, { animate });
-    status.className = "status-pill ready";
-    statusText.textContent = capture ? "Datos verificados" : "Esperando datos";
-    bootProgress(92, "Renderizando mercado", `${state.rows.length} observaciones`);
+    market = await loadMarket(state.asset, state.frequency);
   } catch (error) {
-    if (currentToken !== refreshToken) return;
-    console.error(error);
-    state.rows = [];
-    renderMetrics([]);
-    renderChart([]);
-    status.className = "status-pill error";
-    statusText.textContent = "Datos no disponibles";
-    bootProgress(92, "Sin datos disponibles", "fallo de lectura pública");
+    if (token !== state.token) return;
+    showError(error.message);
+    return;
   }
-  finishBoot();
+
+  try {
+    official = await loadTco();
+  } catch (error) {
+    tcoError = true;
+  }
+
+  if (token !== state.token) return;
+
+  state.tco = official ? official.map : new Map();
+  state.tcoLatest = official ? official.latest : null;
+  state.rows = buildRows(market, state.rangeDays);
+
+  const asOf = market.BUY?.as_of_utc || market.SELL?.as_of_utc || null;
+  state.asOf = asOf;
+  state.loading = false;
+  $("#refresh-btn").classList.remove("is-busy");
+  $("#error-state").hidden = true;
+
+  if (asOf) {
+    $("#as-of").textContent = fullDateFormat.format(new Date(asOf));
+    $("#as-of-rel").textContent = relativeLabel(asOf);
+    $("#foot-capture").textContent = `Última captura: ${fullDateFormat.format(new Date(asOf))}`;
+    $("#status-capture").textContent = fullDateFormat.format(new Date(asOf));
+  }
+  $("#status-freq").textContent = frequencyLabels[state.frequency] || state.frequency;
+  $("#status-tco").textContent = tcoError
+    ? "No disponible"
+    : state.tcoLatest
+      ? `Bs ${tcoFormat.format(state.tcoLatest.compra)} / ${tcoFormat.format(state.tcoLatest.venta)}`
+      : "—";
+
+  setStatus(tcoError ? "loading" : "ok", tcoError ? "Datos parciales" : "Datos actualizados");
+  paint();
 }
 
-function applyAssetView() {
-  document.documentElement.dataset.asset = state.asset;
-  $("#market-logo").src = `assets/${state.asset.toLowerCase()}.png`;
-  $("#market-label").textContent = `${state.asset} / Bs.`;
-  setActive($("#asset-selector"), "asset", state.asset);
+/* ---------------------------------------------------------------- eventos -- */
+
+function bindTip() {
+  const bubble = $("#tip-bubble");
+  const show = (target) => {
+    const text = target.dataset.tip;
+    if (!text) return;
+    bubble.textContent = text;
+    bubble.hidden = false;
+    const rect = target.getBoundingClientRect();
+    const width = bubble.offsetWidth;
+    bubble.style.left = `${clamp(rect.left + rect.width / 2 - width / 2, 8, window.innerWidth - width - 8)}px`;
+    bubble.style.top = `${Math.max(8, rect.top - bubble.offsetHeight - 8)}px`;
+  };
+  const hide = () => { bubble.hidden = true; };
+
+  document.addEventListener("pointerover", (event) => {
+    const target = event.target.closest("[data-tip]");
+    if (target) show(target); else hide();
+  });
+  document.addEventListener("pointerdown", (event) => {
+    const target = event.target.closest("[data-tip]");
+    if (target) show(target); else hide();
+  });
+  document.addEventListener("focusin", (event) => {
+    const target = event.target.closest("[data-tip]");
+    if (target) show(target); else hide();
+  });
+  window.addEventListener("scroll", hide, { passive: true });
 }
 
-$("#asset-selector").querySelectorAll("button").forEach((button) => {
-  button.addEventListener("click", async () => {
-    if (state.asset === button.dataset.asset) return;
+function bindEvents() {
+  $("#asset-selector").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-asset]");
+    if (!button || button.dataset.asset === state.asset) return;
     state.asset = button.dataset.asset;
     if (!allowedFrequencies[state.asset].includes(state.frequency)) {
       state.frequency = allowedFrequencies[state.asset][0];
     }
-    applyAssetView();
-    renderFrequencyButtons();
     savePreferences();
-    await refresh({ animate: true });
+    syncControls();
+    refresh();
   });
-});
 
-$("#range-selector").querySelectorAll("button").forEach((button) => {
-  button.addEventListener("click", async () => {
+  $("#frequency-selector").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-frequency]");
+    if (!button || button.disabled || button.dataset.frequency === state.frequency) return;
+    state.frequency = button.dataset.frequency;
+    savePreferences();
+    syncControls();
+    refresh();
+  });
+
+  $("#range-selector").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-range]");
+    if (!button || button.disabled) return;
     const range = Number(button.dataset.range);
-    if (state.rangeDays === range) return;
+    if (range === state.rangeDays) return;
     state.rangeDays = range;
-    setActive($("#range-selector"), "range", state.rangeDays);
     savePreferences();
-    await refresh({ animate: true });
+    syncControls();
+    refresh();
   });
-});
 
-const volumeToggle = $("#volume-toggle");
-volumeToggle.addEventListener("click", () => {
-  state.showVolume = !state.showVolume;
-  volumeToggle.classList.toggle("active", state.showVolume);
-  volumeToggle.setAttribute("aria-pressed", String(state.showVolume));
-  savePreferences();
-  renderChart(state.rows, { animate: true });
-});
+  $("#legend").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-serie]");
+    if (!button) return;
+    const id = button.dataset.serie;
+    if (id === "volume") state.showVolume = !state.showVolume;
+    else state.visible[id] = !state.visible[id];
+    savePreferences();
+    renderLegend();
+    if (!state.loading) paint();
+  });
 
-const refreshButton = $("#refresh-btn");
-refreshButton.addEventListener("click", async () => {
-  refreshButton.classList.add("is-busy");
-  await refresh();
-  refreshButton.classList.remove("is-busy");
-});
+  $("#refresh-btn").addEventListener("click", () => { if (!state.loading) refresh(); });
+  $("#retry-btn").addEventListener("click", () => { if (!state.loading) refresh(); });
 
-let lastChartSize = { width: 0, height: 0 };
-let resizeTimer;
-const chartObserver = new ResizeObserver(([entry]) => {
-  const { width, height } = entry.contentRect;
-  if (Math.abs(width - lastChartSize.width) < 8 && Math.abs(height - lastChartSize.height) < 8) {
-    return;
-  }
-  lastChartSize = { width, height };
-  window.clearTimeout(resizeTimer);
-  resizeTimer = window.setTimeout(() => renderChart(state.rows), 160);
-});
-chartObserver.observe($("#chart-wrap"));
+  const statusButton = $("#data-status");
+  statusButton.addEventListener("click", () => {
+    const panel = $("#status-panel");
+    const open = panel.hidden;
+    panel.hidden = !open;
+    statusButton.setAttribute("aria-expanded", String(open));
+  });
+  document.addEventListener("click", (event) => {
+    if (event.target.closest(".status-wrap")) return;
+    $("#status-panel").hidden = true;
+    statusButton.setAttribute("aria-expanded", "false");
+  });
 
-window.setInterval(() => {
-  if (document.visibilityState === "visible") refresh();
-}, 300_000);
+  const svg = $("#market-chart");
+  svg.addEventListener("pointermove", showTooltip);
+  svg.addEventListener("pointerdown", showTooltip);
+  svg.addEventListener("pointerleave", hideTooltip);
 
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") refresh();
-});
+  let resizeTimer = 0;
+  window.addEventListener("resize", () => {
+    window.clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(() => { if (!state.loading) paint(); }, 160);
+  });
+
+  window.setInterval(() => {
+    if (state.asOf) $("#as-of-rel").textContent = relativeLabel(state.asOf);
+  }, 60000);
+}
 
 restorePreferences();
-applyAssetView();
-volumeToggle.classList.toggle("active", state.showVolume);
-volumeToggle.setAttribute("aria-pressed", String(state.showVolume));
-setActive($("#range-selector"), "range", state.rangeDays);
-renderFrequencyButtons();
-startBootSequence();
-refresh({ animate: true });
+syncControls();
+bindTip();
+bindEvents();
+refresh();
