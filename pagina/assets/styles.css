@@ -344,6 +344,7 @@ h1 {
 .metric-card.accent-venta::before { background: var(--green); opacity: 1; }
 .metric-card.accent-compra::before { background: var(--cyan); opacity: 1; }
 .metric-card.accent-tco::before { background: var(--tco-2); opacity: .9; }
+.metric-card.accent-brecha::before { background: linear-gradient(90deg, var(--green), var(--tco-2)); opacity: 1; }
 
 .metric-title {
   display: flex;
@@ -592,7 +593,7 @@ h1 {
 
 @media (min-width: 640px) {
   body { font-size: 14.5px; }
-  .metrics-secondary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .metrics-secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .chart-wrap { height: 400px; }
   .chart-wrap.no-volume { height: 380px; }
 }
@@ -602,7 +603,7 @@ h1 {
   h1 { font-size: 36px; }
   .hero { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 28px; }
   .metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-  .metrics-secondary { gap: 12px; }
+  .metrics-secondary { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
   .metric-card { padding: 16px 17px; }
   .metric-card > strong { font-size: 27px; }
   .chart-card { padding: 20px; }

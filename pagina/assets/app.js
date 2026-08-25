@@ -3,20 +3,40 @@
    los valores P2P se muestran tal como llegan en los JSON publicos y el tipo de
    cambio oficial tal como lo publica el CSV diario de TCO-BCB. */
 
-const allowedFrequencies = {
+/* Resoluciones que publica el sistema tal cual. */
+const BASE_FREQUENCIES = {
   USDT: ["5m", "1h", "1d"],
   USDC: ["1h", "1d"],
 };
+
+/* Resoluciones derivadas: se arman agrupando los puntos que ya llegan en el JSON.
+   El precio de cada bloque es la suma de volume_bob dividida por la suma de
+   volume_asset, es decir el mismo promedio ponderado que trae la fuente, no un
+   promedio simple ni un valor inventado. */
+const DERIVED = {
+  "15m": { base: "5m", ms: 15 * 60_000 },
+  "30m": { base: "5m", ms: 30 * 60_000 },
+  "4h": { base: "1h", ms: 4 * 3_600_000 },
+};
+
 const allowedRanges = [1, 7, 30];
 
 const FREQ_OPTIONS = [
   { id: "5m", label: "5m" },
-  { id: "15m", label: "15m", locked: true },
-  { id: "30m", label: "30m", locked: true },
+  { id: "15m", label: "15m" },
+  { id: "30m", label: "30m" },
   { id: "1h", label: "1h" },
-  { id: "4h", label: "4h", locked: true },
+  { id: "4h", label: "4h" },
   { id: "1d", label: "1D" },
 ];
+
+const baseOf = (frequency) => DERIVED[frequency]?.base || frequency;
+
+function availableFrequencies(asset) {
+  return FREQ_OPTIONS
+    .filter((option) => BASE_FREQUENCIES[asset].includes(baseOf(option.id)))
+    .map((option) => option.id);
+}
 
 /* Serie oficial publicada en el repositorio publico TCO-BCB. */
 const TCO_URL = "https://raw.githubusercontent.com/BohozX/TCO-BCB/main/datos/tco.csv";
@@ -27,7 +47,6 @@ const state = {
   rangeDays: 30,
   side: "venta",
   showVolume: true,
-  visible: { p2pVenta: true, p2pCompra: true, tcoVenta: true, tcoCompra: true },
   rows: [],
   tco: new Map(),
   tcoLatest: null,
@@ -119,17 +138,12 @@ function restorePreferences() {
   } catch (error) {
     saved = {};
   }
-  if (Object.hasOwn(allowedFrequencies, saved.asset)) state.asset = saved.asset;
-  if (allowedFrequencies[state.asset].includes(saved.frequency)) state.frequency = saved.frequency;
-  else state.frequency = allowedFrequencies[state.asset][0];
+  if (Object.hasOwn(BASE_FREQUENCIES, saved.asset)) state.asset = saved.asset;
+  const disponibles = availableFrequencies(state.asset);
+  state.frequency = disponibles.includes(saved.frequency) ? saved.frequency : disponibles[0];
   if (allowedRanges.includes(saved.rangeDays)) state.rangeDays = saved.rangeDays;
   if (Object.hasOwn(SIDE_VIEW, saved.side)) state.side = saved.side;
   if (typeof saved.showVolume === "boolean") state.showVolume = saved.showVolume;
-  if (saved.visible && typeof saved.visible === "object") {
-    Object.keys(state.visible).forEach((key) => {
-      if (typeof saved.visible[key] === "boolean") state.visible[key] = saved.visible[key];
-    });
-  }
 }
 
 function savePreferences() {
@@ -140,7 +154,6 @@ function savePreferences() {
       rangeDays: state.rangeDays,
       side: state.side,
       showVolume: state.showVolume,
-      visible: state.visible,
     }));
   } catch (error) {
     /* almacenamiento no disponible */
@@ -149,8 +162,41 @@ function savePreferences() {
 
 /* ----------------------------------------------------------------- datos -- */
 
+/* Agrupa los puntos que ya llegan del JSON en bloques de mayor duracion.
+   Los volumenes se suman y el precio del bloque es sum(volume_bob)/sum(volume_asset),
+   que es exactamente el promedio ponderado de los puntos que lo componen. Un bloque
+   sin volumen queda sin precio, no se arrastra el anterior. */
+function aggregatePoints(points, ms) {
+  const buckets = new Map();
+  points.forEach((point) => {
+    const time = Date.parse(point.timestamp_utc);
+    if (!Number.isFinite(time)) return;
+    const key = Math.floor(time / ms) * ms;
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = { asset: 0, bob: 0, events: 0, observed: false };
+      buckets.set(key, bucket);
+    }
+    bucket.asset += Number(point.volume_asset || 0);
+    bucket.bob += Number(point.volume_bob || 0);
+    bucket.events += Number(point.validated_events || 0);
+    bucket.observed = bucket.observed || Boolean(point.price_observed);
+  });
+
+  return [...buckets.entries()].sort((a, b) => a[0] - b[0]).map(([key, bucket]) => ({
+    timestamp_utc: new Date(key).toISOString().replace(".000Z", "Z"),
+    timestamp_bo: `${new Date(key - 4 * 3_600_000).toISOString().slice(0, 19)}-04:00`,
+    vwap_bob: bucket.asset > 0 ? bucket.bob / bucket.asset : null,
+    volume_asset: bucket.asset,
+    volume_bob: bucket.bob,
+    validated_events: bucket.events,
+    price_observed: bucket.observed,
+  }));
+}
+
 async function loadSeries(asset, side, frequency) {
-  const key = `${asset}/${side.path}/${frequency}`;
+  const base = baseOf(frequency);
+  const key = `${asset}/${side.path}/${base}`;
   const response = await fetch(`data/${key}.json?v=${Date.now()}`, { cache: "no-store" });
   if (!response.ok) throw new Error(`No se pudo cargar ${key}`);
   const payload = await response.json();
@@ -158,9 +204,12 @@ async function loadSeries(asset, side, frequency) {
     payload.window_days !== 30
     || payload.asset !== asset
     || payload.side !== side.key
-    || payload.frequency !== frequency
+    || payload.frequency !== base
   ) {
     throw new Error("El archivo público no cumple el contrato esperado");
+  }
+  if (DERIVED[frequency]) {
+    payload.points = aggregatePoints(payload.points || [], DERIVED[frequency].ms);
   }
   return payload;
 }
@@ -346,6 +395,20 @@ function renderMetrics(rows) {
       : `${percentFormat.format((spread / Number(compra)) * 100)} % sobre el precio de compra`;
   }
 
+  /* Brecha del lado activo: precio P2P frente al TCO vigente del mismo lado. */
+  const etiqueta = state.side === "venta" ? "Venta" : "Compra";
+  $("#metric-gap-title").textContent = `Brecha ${etiqueta} · Bs.`;
+  const p2p = summaries[state.side].price;
+  const oficialLado = state.tcoLatest ? state.tcoLatest[state.side] : null;
+  if (p2p == null || oficialLado == null) {
+    $("#metric-gap").textContent = "—";
+    $("#metric-gap-pct").textContent = "P2P frente al tipo de cambio oficial";
+  } else {
+    const gap = Number(p2p) - Number(oficialLado);
+    $("#metric-gap").textContent = priceFormat.format(gap);
+    $("#metric-gap-pct").textContent = `${percentFormat.format((gap / Number(oficialLado)) * 100)} % sobre el TCO ${etiqueta}`;
+  }
+
   const official = state.tcoLatest;
   const stamp = official ? `Vigencia ${dayFormat.format(new Date(`${official.vigencia}T12:00:00Z`))}` : "";
   $("#metric-tco-venta").textContent = official?.venta == null ? "—" : tcoFormat.format(official.venta);
@@ -372,7 +435,7 @@ function chartGeometry(points, width, height) {
   const priceTop = padTop;
   const priceBottom = height - padBottom - (withVolume ? volumeHeight + 24 : 0);
 
-  const activeSeries = sideSeries().filter((serie) => state.visible[serie.id]);
+  const activeSeries = sideSeries();
   const values = [];
   points.forEach((point) => {
     activeSeries.forEach((serie) => {
@@ -484,13 +547,11 @@ function renderChart(points) {
   /* sombreado de la distancia entre el precio P2P y el TCO del lado elegido.
      Es solo relleno entre dos lineas ya dibujadas: no calcula ninguna brecha. */
   const view = SIDE_VIEW[state.side];
-  if (state.visible[view.p2p] && state.visible[view.tco]) {
-    const shade = gapPath(points, geo, view.p2p, view.tco);
-    if (shade) {
-      svg.append(svgElement("path", {
-        d: shade, fill: tone[view.p2p], "fill-opacity": .13, stroke: "none",
-      }));
-    }
+  const shade = gapPath(points, geo, view.p2p, view.tco);
+  if (shade) {
+    svg.append(svgElement("path", {
+      d: shade, fill: tone[view.p2p], "fill-opacity": .13, stroke: "none",
+    }));
   }
 
   /* barras de volumen */
@@ -629,13 +690,20 @@ function showTooltip(event) {
   }
 
   const tone = palette();
+  const view = SIDE_VIEW[state.side];
   const rows = [];
   sideSeries().forEach((serie) => {
-    if (!state.visible[serie.id]) return;
     const value = point[serie.id];
     if (value == null || !Number.isFinite(Number(value))) return;
     rows.push(`<div class="tip-row"><span><i class="dot" style="background:${tone[serie.id]}"></i>${serie.label}</span><b>Bs ${priceFormat.format(value)}</b></div>`);
   });
+
+  const pP2p = point[view.p2p];
+  const pTco = point[view.tco];
+  if (pP2p != null && pTco != null && Number(pTco) !== 0) {
+    const gap = Number(pP2p) - Number(pTco);
+    rows.push(`<div class="tip-row"><span>Brecha</span><b>Bs ${priceFormat.format(gap)} · ${percentFormat.format((gap / Number(pTco)) * 100)} %</b></div>`);
+  }
   if (state.showVolume && (point.volVenta || point.volCompra)) {
     rows.push(`<div class="tip-row"><span>Vol. estimado</span><b>${compactFormat.format(point.volVenta + point.volCompra)} ${state.asset}</b></div>`);
   }
@@ -717,7 +785,7 @@ function renderFrequencySelector() {
   const host = $("#frequency-selector");
   host.textContent = "";
   FREQ_OPTIONS.forEach((option) => {
-    const supported = !option.locked && allowedFrequencies[state.asset].includes(option.id);
+    const supported = availableFrequencies(state.asset).includes(option.id);
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = option.label;
@@ -731,15 +799,17 @@ function renderFrequencySelector() {
   });
 }
 
+/* La leyenda es el unico conmutador: al tocar cualquier serie de un lado, el
+   grafico pasa entero a ese lado (precio P2P + su TCO) y se sombrea la brecha. */
 function renderLegend() {
   const host = $("#legend");
   const tone = palette();
   host.textContent = "";
-  sideSeries().forEach((serie) => {
+  SERIES.forEach((serie) => {
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.serie = serie.id;
-    button.setAttribute("aria-pressed", String(state.visible[serie.id]));
+    button.setAttribute("aria-pressed", String(serie.side === state.side));
     button.innerHTML = `<i class="swatch${serie.dash ? " dash" : ""}" style="${serie.dash ? `color:${tone[serie.id]}` : `background:${tone[serie.id]}`}"></i>${serie.label}`;
     host.append(button);
   });
@@ -762,9 +832,6 @@ function syncControls() {
   });
   document.querySelectorAll("#range-selector button").forEach((button) => {
     button.classList.toggle("active", Number(button.dataset.range) === state.rangeDays);
-  });
-  document.querySelectorAll("#side-selector button").forEach((button) => {
-    button.classList.toggle("active", button.dataset.side === state.side);
   });
   renderFrequencySelector();
   renderLegend();
@@ -878,9 +945,8 @@ function bindEvents() {
     const button = event.target.closest("button[data-asset]");
     if (!button || button.dataset.asset === state.asset) return;
     state.asset = button.dataset.asset;
-    if (!allowedFrequencies[state.asset].includes(state.frequency)) {
-      state.frequency = allowedFrequencies[state.asset][0];
-    }
+    const disponibles = availableFrequencies(state.asset);
+    if (!disponibles.includes(state.frequency)) state.frequency = disponibles[0];
     savePreferences();
     syncControls();
     refresh();
@@ -906,21 +972,17 @@ function bindEvents() {
     refresh();
   });
 
-  $("#side-selector").addEventListener("click", (event) => {
-    const button = event.target.closest("button[data-side]");
-    if (!button || button.dataset.side === state.side) return;
-    state.side = button.dataset.side;
-    savePreferences();
-    syncControls();
-    if (!state.loading) paint();
-  });
-
   $("#legend").addEventListener("click", (event) => {
     const button = event.target.closest("button[data-serie]");
     if (!button) return;
     const id = button.dataset.serie;
-    if (id === "volume") state.showVolume = !state.showVolume;
-    else state.visible[id] = !state.visible[id];
+    if (id === "volume") {
+      state.showVolume = !state.showVolume;
+    } else {
+      const serie = SERIES.find((item) => item.id === id);
+      if (!serie || serie.side === state.side) return;
+      state.side = serie.side;
+    }
     savePreferences();
     renderLegend();
     if (!state.loading) paint();
