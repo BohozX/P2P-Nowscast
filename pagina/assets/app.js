@@ -588,8 +588,7 @@ function renderChart(points) {
   const geo = chartGeometry(points, width, height);
   const tone = palette();
 
-  /* etiquetas del borde derecho: se calculan primero y se separan entre si para
-     que nunca queden encimadas cuando dos series comparten nivel */
+  /* posicion del ultimo valor de cada serie, solo para el punto final */
   const edge = [];
   geo.activeSeries.forEach((serie) => {
     let lastIndex = -1;
@@ -597,16 +596,8 @@ function renderChart(points) {
       if (point[serie.id] != null && Number.isFinite(Number(point[serie.id]))) lastIndex = index;
     });
     if (lastIndex < 0) return;
-    const value = Number(points[lastIndex][serie.id]);
-    edge.push({ serie, value, index: lastIndex, y: geo.yOf(value), anchor: geo.yOf(value) });
+    edge.push({ serie, index: lastIndex, anchor: geo.yOf(Number(points[lastIndex][serie.id])) });
   });
-  edge.sort((a, b) => a.y - b.y);
-  const GAP = 14;
-  for (let i = 1; i < edge.length; i += 1) {
-    if (edge[i].y - edge[i - 1].y < GAP) edge[i].y = edge[i - 1].y + GAP;
-  }
-  const overflow = edge.length ? edge.at(-1).y - (height - 6) : 0;
-  if (overflow > 0) edge.forEach((item) => { item.y -= overflow; });
 
   /* rejilla y niveles */
   const gridGroup = svgElement("g");
@@ -617,7 +608,6 @@ function renderChart(points) {
       x1: 0, x2: width - geo.padRight + 4, y1: y.toFixed(1), y2: y.toFixed(1),
       stroke: tone.grid, "stroke-width": 1,
     }));
-    if (edge.some((item) => Math.abs(item.y - y) < GAP)) continue;
     const label = svgElement("text", {
       x: width - geo.padRight + 10, y: (y + 3.5).toFixed(1),
       fill: "#6d857c", "font-size": 11, "font-family": "JetBrains Mono, monospace",
@@ -637,8 +627,10 @@ function renderChart(points) {
     }));
   }
   if (shade.abajo) {
+    /* Mas opaco que el tramo de arriba: sobre fondo oscuro un rojo tenue se lee
+       como un hueco en el sombreado en vez de como un tramo por debajo del TCO. */
     svg.append(svgElement("path", {
-      d: shade.abajo, fill: "#ff6b6b", "fill-opacity": .13, stroke: "none",
+      d: shade.abajo, fill: "#ff6b6b", "fill-opacity": .3, stroke: "none",
     }));
   }
 
@@ -693,24 +685,6 @@ function renderChart(points) {
         cx: geo.xOf(marker.index).toFixed(1), cy: marker.anchor.toFixed(1), r: 3.4, fill: tone[serie.id],
       }));
     }
-  });
-
-  /* etiquetas del ultimo valor, ya separadas */
-  edge.forEach((item) => {
-    const text = tcoFormat.format(item.value);
-    const x = width - geo.padRight + 6;
-    svg.append(svgElement("rect", {
-      x: x.toFixed(1), y: (item.y - 8).toFixed(1),
-      width: Math.max(38, text.length * 7.2), height: 16, rx: 4,
-      fill: tone.panel, stroke: tone[item.serie.id], "stroke-width": .8, opacity: .96,
-    }));
-    const tag = svgElement("text", {
-      x: (x + 5).toFixed(1), y: (item.y + 3.6).toFixed(1),
-      fill: tone[item.serie.id], "font-size": 11, "font-weight": 700,
-      "font-family": "JetBrains Mono, monospace",
-    });
-    tag.textContent = text;
-    svg.append(tag);
   });
 
   /* eje temporal: si el rango abarca poco tiempo se muestra la hora */
