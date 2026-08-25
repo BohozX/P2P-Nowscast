@@ -49,7 +49,6 @@ const state = {
   showVolume: true,
   rows: [],
   tco: new Map(),
-  tcoLatest: null,
   asOf: null,
   loading: false,
   token: 0,
@@ -79,6 +78,26 @@ const SIDE_VIEW = {
   /* Modo spread: compara los dos precios P2P entre si, sin el oficial. */
   spread: { p2p: "p2pVenta", tco: "p2pCompra" },
 };
+
+/* Un bloque sin operaciones no tiene precio propio. Para que la linea no quede
+   partida se arrastra el ultimo precio conocido: el mercado siguio en ese nivel
+   porque nadie opero. Solo afecta al dibujo; el volumen de ese bloque sigue
+   siendo cero y el tooltip lo dice. */
+function arrastrarPrecios(points, claves) {
+  const ultimo = {};
+  points.forEach((point) => {
+    claves.forEach((clave) => {
+      const valor = point[clave];
+      if (valor != null && Number.isFinite(Number(valor))) {
+        ultimo[clave] = valor;
+      } else if (ultimo[clave] != null) {
+        point[clave] = ultimo[clave];
+        point.arrastrado = true;
+      }
+    });
+  });
+  return points;
+}
 
 function palette() {
   const styles = getComputedStyle(document.documentElement);
@@ -129,6 +148,11 @@ const shortDateFormat = new Intl.DateTimeFormat("es-BO", {
   timeZone, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false,
 });
 const dayFormat = new Intl.DateTimeFormat("es-BO", { timeZone, day: "2-digit", month: "short" });
+/* Fecha de hoy en Bolivia, en formato AAAA-MM-DD, para saber que TCO rige ahora. */
+const isoBoFormat = new Intl.DateTimeFormat("en-CA", {
+  timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+});
+const hoyEnBolivia = () => isoBoFormat.format(new Date());
 
 const $ = (selector) => document.querySelector(selector);
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
@@ -374,10 +398,19 @@ function renderDelta(node, change) {
   node.textContent = `${change >= 0 ? "▲" : "▼"} ${percentFormat.format(Math.abs(change))} %`;
 }
 
-/* Vigencia publicada justo antes de la ultima, para la variacion diaria. */
+/* El TCO que rige hoy. El BCB publica el de manana por adelantado, pero no entra
+   en vigor hasta esa fecha: la pagina muestra el del dia en curso. */
+function tcoVigente() {
+  const hoy = hoyEnBolivia();
+  const fechas = [...state.tco.keys()].filter((f) => f <= hoy).sort();
+  return fechas.length ? state.tco.get(fechas.at(-1)) : null;
+}
+
+/* Vigencia publicada justo antes de la que rige, para la variacion diaria. */
 function tcoPrevio() {
-  if (!state.tcoLatest) return null;
-  const fechas = [...state.tco.keys()].filter((f) => f < state.tcoLatest.vigencia).sort();
+  const actual = tcoVigente();
+  if (!actual) return null;
+  const fechas = [...state.tco.keys()].filter((f) => f < actual.vigencia).sort();
   return fechas.length ? state.tco.get(fechas.at(-1)) : null;
 }
 
@@ -418,7 +451,8 @@ function renderMetrics(rows) {
     const etiqueta = state.side === "venta" ? "Venta" : "Compra";
     $("#metric-gap-title").textContent = `Brecha ${etiqueta} · Bs.`;
     const p2p = summaries[state.side].price;
-    const oficialLado = state.tcoLatest ? state.tcoLatest[state.side] : null;
+    const vig = tcoVigente();
+    const oficialLado = vig ? vig[state.side] : null;
     if (p2p == null || oficialLado == null) {
       $("#metric-gap").textContent = "—";
       $("#metric-gap-pct").textContent = "P2P frente al tipo de cambio oficial";
@@ -429,7 +463,7 @@ function renderMetrics(rows) {
     }
   }
 
-  const official = state.tcoLatest;
+  const official = tcoVigente();
   const previo = tcoPrevio();
   const fecha = (iso) => dayFormat.format(new Date(`${iso}T12:00:00Z`));
 
@@ -440,13 +474,17 @@ function renderMetrics(rows) {
 
     const anterior = previo ? previo[lado] : null;
     if (actual == null || anterior == null) {
-      $(`#metric-tco-${lado}-note`).textContent = "Banco Central de Bolivia";
+      const nota = $(`#metric-tco-${lado}-note`);
+      nota.className = "metric-note";
+      nota.textContent = "Banco Central de Bolivia";
       return;
     }
     const cambio = Number(actual) - Number(anterior);
     const signo = cambio > 0 ? "▲" : cambio < 0 ? "▼" : "=";
     const pct = Number(anterior) === 0 ? "" : ` · ${percentFormat.format((cambio / Number(anterior)) * 100)} %`;
-    $(`#metric-tco-${lado}-note`).textContent =
+    const nota = $(`#metric-tco-${lado}-note`);
+    nota.className = `metric-note delta ${cambio > 0 ? "up" : cambio < 0 ? "down" : ""}`.trim();
+    nota.textContent =
       `${signo} ${priceFormat.format(Math.abs(cambio))}${pct} vs ${fecha(previo.vigencia)}`;
   });
 }
@@ -679,10 +717,27 @@ function renderChart(points) {
       ...(serie.dash ? { "stroke-dasharray": serie.dash } : {}),
     }));
 
+    /* Un punto por observacion real. Donde se arrastro el precio por falta de
+       operaciones no hay punto, asi se distingue de un dato observado. */
+    if (!serie.dash) {
+      const paso = (width - 8 - geo.padRight) / Math.max(points.length - 1, 1);
+      const radio = clamp(paso * 0.26, 1.1, 3);
+      const puntos = svgElement("g", { fill: tone[serie.id] });
+      points.forEach((point, index) => {
+        const value = point[serie.id];
+        if (value == null || !Number.isFinite(Number(value)) || point.arrastrado) return;
+        puntos.append(svgElement("circle", {
+          cx: geo.xOf(index).toFixed(1), cy: geo.yOf(value).toFixed(1), r: radio.toFixed(1),
+        }));
+      });
+      svg.append(puntos);
+    }
+
     const marker = edge.find((item) => item.serie.id === serie.id);
     if (marker && !serie.dash) {
       svg.append(svgElement("circle", {
-        cx: geo.xOf(marker.index).toFixed(1), cy: marker.anchor.toFixed(1), r: 3.4, fill: tone[serie.id],
+        cx: geo.xOf(marker.index).toFixed(1), cy: marker.anchor.toFixed(1), r: 3.6,
+        fill: tone[serie.id], stroke: tone.panel, "stroke-width": 1.4,
       }));
     }
   });
@@ -781,6 +836,9 @@ function showTooltip(event) {
   }
   if (tx) {
     rows.push(`<div class="tip-row"><span>Trans. estimadas</span><b>${integerFormat.format(tx)}</b></div>`);
+  }
+  if (point.arrastrado && !vol) {
+    rows.push('<div class="tip-row tip-nota"><span>Sin operaciones en este bloque</span></div>');
   }
 
   const tooltip = $("#chart-tooltip");
@@ -931,7 +989,10 @@ function paint() {
   const rows = state.rows;
   renderMetrics(rows);
 
-  const flat = downsampleRows(rows, 320).map(flattenRow);
+  const flat = arrastrarPrecios(
+    downsampleRows(rows, 320).map(flattenRow),
+    ["p2pVenta", "p2pCompra"],
+  );
   const usable = flat.filter((point) => (
     point.p2pVenta != null || point.p2pCompra != null || point.volVenta || point.volCompra
   ));
@@ -971,7 +1032,6 @@ async function refresh() {
   if (token !== state.token) return;
 
   state.tco = official ? official.map : new Map();
-  state.tcoLatest = official ? official.latest : null;
   state.rows = buildRows(market, state.rangeDays);
 
   const asOf = market.BUY?.as_of_utc || market.SELL?.as_of_utc || null;
@@ -992,9 +1052,10 @@ async function refresh() {
   $("#status-freq").textContent = frequencyLabels[state.frequency] || state.frequency;
   $("#status-tco").textContent = tcoError
     ? "No disponible"
-    : state.tcoLatest
-      ? `Bs ${tcoFormat.format(state.tcoLatest.compra)} / ${tcoFormat.format(state.tcoLatest.venta)}`
-      : "—";
+    : (() => {
+      const v = tcoVigente();
+      return v ? `Bs ${tcoFormat.format(v.compra)} / ${tcoFormat.format(v.venta)} (${v.vigencia})` : "—";
+    })();
 
   paint();
 }
