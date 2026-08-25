@@ -32,6 +32,25 @@ const FREQ_OPTIONS = [
 
 const baseOf = (frequency) => DERIVED[frequency]?.base || frequency;
 
+/* Duracion de cada bloque. El dato se etiqueta con el FIN de su intervalo: lo que
+   se ve como 08:15 en la frecuencia de 15 minutos es lo ocurrido antes de las 08:15. */
+const FREQ_MS = {
+  "5m": 5 * 60_000,
+  "15m": 15 * 60_000,
+  "30m": 30 * 60_000,
+  "1h": 3_600_000,
+  "4h": 4 * 3_600_000,
+  "1d": 86_400_000,
+};
+
+const esDiaria = () => state.frequency === "1d";
+
+/* Instante que se muestra para un punto. En la resolucion diaria se deja el dia
+   tal cual, sin hora y sin correrlo al dia siguiente. */
+function instante(time) {
+  return esDiaria() ? new Date(time) : new Date(time + (FREQ_MS[state.frequency] || 0));
+}
+
 function availableFrequencies(asset) {
   return FREQ_OPTIONS
     .filter((option) => BASE_FREQUENCIES[asset].includes(baseOf(option.id)))
@@ -148,6 +167,9 @@ const shortDateFormat = new Intl.DateTimeFormat("es-BO", {
   timeZone, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false,
 });
 const dayFormat = new Intl.DateTimeFormat("es-BO", { timeZone, day: "2-digit", month: "short" });
+const diaLargoFormat = new Intl.DateTimeFormat("es-BO", {
+  timeZone, day: "2-digit", month: "short", year: "numeric",
+});
 /* Fecha de hoy en Bolivia, en formato AAAA-MM-DD, para saber que TCO rige ahora. */
 const isoBoFormat = new Intl.DateTimeFormat("en-CA", {
   timeZone, year: "numeric", month: "2-digit", day: "2-digit",
@@ -679,7 +701,7 @@ function renderChart(points) {
       ? [["volVenta", tone.p2pVenta, -1], ["volCompra", tone.p2pCompra, 1]]
       : [[state.side === "venta" ? "volVenta" : "volCompra", tone[SIDE_VIEW[state.side].p2p], 0]];
     const slot = (width - 8 - geo.padRight) / Math.max(points.length, 1);
-    const barWidth = clamp(slot * (enSpread() ? 0.4 : 0.72), 1.5, 22);
+    const barWidth = clamp(slot * (enSpread() ? 0.4 : 0.78), 0.6, 22);
     const volumeGroup = svgElement("g");
     points.forEach((point, index) => {
       const x = geo.xOf(index);
@@ -719,8 +741,8 @@ function renderChart(points) {
 
     /* Un punto por observacion real. Donde se arrastro el precio por falta de
        operaciones no hay punto, asi se distingue de un dato observado. */
-    if (!serie.dash) {
-      const paso = (width - 8 - geo.padRight) / Math.max(points.length - 1, 1);
+    const paso = (width - 8 - geo.padRight) / Math.max(points.length - 1, 1);
+    if (!serie.dash && paso >= 2.5) {
       const radio = clamp(paso * 0.26, 1.1, 3);
       const puntos = svgElement("g", { fill: tone[serie.id] });
       points.forEach((point, index) => {
@@ -750,9 +772,9 @@ function renderChart(points) {
   const seen = [];
   for (let index = 0; index < ticks; index += 1) {
     const position = Math.round((index / Math.max(ticks - 1, 1)) * (points.length - 1));
-    const date = new Date(points[position].time);
-    let text = useClock ? shortDateFormat.format(date) : dayFormat.format(date);
-    if (!useClock && seen.includes(text)) text = shortDateFormat.format(date);
+    const date = instante(points[position].time);
+    let text = (useClock && !esDiaria()) ? shortDateFormat.format(date) : dayFormat.format(date);
+    if (!useClock && !esDiaria() && seen.includes(text)) text = shortDateFormat.format(date);
     seen.push(text);
     const label = svgElement("text", {
       x: geo.xOf(position).toFixed(1),
@@ -839,7 +861,10 @@ function showTooltip(event) {
   }
 
   const tooltip = $("#chart-tooltip");
-  tooltip.innerHTML = `<h4>${fullDateFormat.format(new Date(point.time))}</h4>${rows.join("")}`;
+  const cuando = esDiaria()
+    ? diaLargoFormat.format(instante(point.time))
+    : fullDateFormat.format(instante(point.time));
+  tooltip.innerHTML = `<h4>${cuando}</h4>${rows.join("")}`;
   tooltip.hidden = false;
 
   const wrapWidth = $("#chart-wrap").clientWidth;
@@ -987,7 +1012,7 @@ function paint() {
   renderMetrics(rows);
 
   const flat = arrastrarPrecios(
-    downsampleRows(rows, 320).map(flattenRow),
+    downsampleRows(rows, 4000).map(flattenRow),
     ["p2pVenta", "p2pCompra"],
   );
   const usable = flat.filter((point) => (
