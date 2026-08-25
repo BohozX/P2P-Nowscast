@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>P2P Nowcast Bolivia</title>
-    <meta name="description" content="Monitoreo del mercado P2P de USDT y USDC y del tipo de cambio oficial en Bolivia.">
+    <meta name="description" content="Precio y volumen P2P observado de USDT y USDC en Binance y Bybit, expresados en bolivianos.">
     <meta name="color-scheme" content="dark">
     <meta name="theme-color" content="#04110e">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -15,7 +15,7 @@
     <link rel="apple-touch-icon" href="assets/logo.png">
     <meta property="og:type" content="website">
     <meta property="og:title" content="P2P Nowcast Bolivia">
-    <meta property="og:description" content="Monitoreo del mercado P2P de USDT y USDC y del tipo de cambio oficial en Bolivia.">
+    <meta property="og:description" content="Precio y volumen P2P observado de USDT y USDC en Binance y Bybit, expresados en bolivianos.">
     <meta property="og:image" content="https://bohozx.github.io/P2P-Nowscast/assets/logo.png">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -72,7 +72,8 @@
             <p class="eyebrow">Mercado P2P · Tipo de cambio oficial</p>
             <h1>P2P Nowcast Bolivia</h1>
             <p class="hero-copy">
-              Monitoreo del mercado P2P y del tipo de cambio oficial en Bolivia.
+              Página diseñada para monitorear el precio y el volumen P2P observado
+              de USDT y USDC en Binance y Bybit, expresados en bolivianos.
             </p>
           </div>
 
@@ -165,6 +166,14 @@
                   <button type="button" data-range="1">24H</button>
                   <button type="button" data-range="7">7D</button>
                   <button class="active" type="button" data-range="30">30D</button>
+                </div>
+              </div>
+
+              <div class="control-group">
+                <span class="control-label">Lado</span>
+                <div class="segmented" id="side-selector" role="group" aria-label="Lado del mercado">
+                  <button class="active" type="button" data-side="venta">Venta</button>
+                  <button type="button" data-side="compra">Compra</button>
                 </div>
               </div>
 

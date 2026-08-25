@@ -25,6 +25,7 @@ const state = {
   asset: "USDT",
   frequency: "5m",
   rangeDays: 30,
+  side: "venta",
   showVolume: true,
   visible: { p2pVenta: true, p2pCompra: true, tcoVenta: true, tcoCompra: true },
   rows: [],
@@ -42,12 +43,38 @@ const displaySides = [
   { key: "SELL", path: "venta", label: "Compra", slug: "compra" },
 ];
 
+/* El color se toma de las variables CSS para que el tema del activo mande:
+   verde para USDT, celeste para USDC. */
 const SERIES = [
-  { id: "p2pVenta", label: "P2P Venta", color: "#35e08b", width: 2.4, dash: "" },
-  { id: "p2pCompra", label: "P2P Compra", color: "#46c8ea", width: 2.4, dash: "" },
-  { id: "tcoVenta", label: "TCO Venta", color: "#d7e2dd", width: 1.8, dash: "7 4" },
-  { id: "tcoCompra", label: "TCO Compra", color: "#8aa39a", width: 1.8, dash: "2 4" },
+  { id: "p2pVenta", label: "P2P Venta", tone: "--green", width: 2.4, dash: "", side: "venta" },
+  { id: "p2pCompra", label: "P2P Compra", tone: "--cyan", width: 2.4, dash: "", side: "compra" },
+  { id: "tcoVenta", label: "TCO Venta", tone: "--tco", width: 1.8, dash: "7 4", side: "venta" },
+  { id: "tcoCompra", label: "TCO Compra", tone: "--tco-2", width: 1.8, dash: "2 4", side: "compra" },
 ];
+
+/* El grafico muestra un lado a la vez: el precio P2P y el tipo de cambio oficial
+   que le corresponde, con la distancia entre ambos sombreada. */
+const SIDE_VIEW = {
+  venta: { p2p: "p2pVenta", tco: "tcoVenta" },
+  compra: { p2p: "p2pCompra", tco: "tcoCompra" },
+};
+
+function palette() {
+  const styles = getComputedStyle(document.documentElement);
+  const read = (name, fallback) => (styles.getPropertyValue(name) || "").trim() || fallback;
+  return {
+    p2pVenta: read("--green", "#35e08b"),
+    p2pCompra: read("--cyan", "#46c8ea"),
+    tcoVenta: read("--tco", "#d7e2dd"),
+    tcoCompra: read("--tco-2", "#8aa39a"),
+    grid: read("--grid-line", "rgba(126,231,178,.07)"),
+    panel: read("--bg-2", "#071613"),
+  };
+}
+
+function sideSeries() {
+  return SERIES.filter((serie) => serie.side === state.side);
+}
 
 const frequencyLabels = { "5m": "5 minutos", "1h": "1 hora", "1d": "1 día" };
 const integerFormat = new Intl.NumberFormat("es-BO", { maximumFractionDigits: 0 });
@@ -96,6 +123,7 @@ function restorePreferences() {
   if (allowedFrequencies[state.asset].includes(saved.frequency)) state.frequency = saved.frequency;
   else state.frequency = allowedFrequencies[state.asset][0];
   if (allowedRanges.includes(saved.rangeDays)) state.rangeDays = saved.rangeDays;
+  if (Object.hasOwn(SIDE_VIEW, saved.side)) state.side = saved.side;
   if (typeof saved.showVolume === "boolean") state.showVolume = saved.showVolume;
   if (saved.visible && typeof saved.visible === "object") {
     Object.keys(state.visible).forEach((key) => {
@@ -110,6 +138,7 @@ function savePreferences() {
       asset: state.asset,
       frequency: state.frequency,
       rangeDays: state.rangeDays,
+      side: state.side,
       showVolume: state.showVolume,
       visible: state.visible,
     }));
@@ -343,7 +372,7 @@ function chartGeometry(points, width, height) {
   const priceTop = padTop;
   const priceBottom = height - padBottom - (withVolume ? volumeHeight + 24 : 0);
 
-  const activeSeries = SERIES.filter((serie) => state.visible[serie.id]);
+  const activeSeries = sideSeries().filter((serie) => state.visible[serie.id]);
   const values = [];
   points.forEach((point) => {
     activeSeries.forEach((serie) => {
@@ -411,6 +440,7 @@ function renderChart(points) {
   if (!points.length) return;
 
   const geo = chartGeometry(points, width, height);
+  const tone = palette();
 
   /* etiquetas del borde derecho: se calculan primero y se separan entre si para
      que nunca queden encimadas cuando dos series comparten nivel */
@@ -439,7 +469,7 @@ function renderChart(points) {
     const y = geo.yOf(value);
     gridGroup.append(svgElement("line", {
       x1: 0, x2: width - geo.padRight + 4, y1: y.toFixed(1), y2: y.toFixed(1),
-      stroke: "rgba(126,231,178,.07)", "stroke-width": 1,
+      stroke: tone.grid, "stroke-width": 1,
     }));
     if (edge.some((item) => Math.abs(item.y - y) < GAP)) continue;
     const label = svgElement("text", {
@@ -451,11 +481,15 @@ function renderChart(points) {
   }
   svg.append(gridGroup);
 
-  /* sombreado de la distancia entre P2P Venta y TCO Venta (solo visual) */
-  if (state.visible.p2pVenta && state.visible.tcoVenta) {
-    const shade = gapPath(points, geo, "p2pVenta", "tcoVenta");
+  /* sombreado de la distancia entre el precio P2P y el TCO del lado elegido.
+     Es solo relleno entre dos lineas ya dibujadas: no calcula ninguna brecha. */
+  const view = SIDE_VIEW[state.side];
+  if (state.visible[view.p2p] && state.visible[view.tco]) {
+    const shade = gapPath(points, geo, view.p2p, view.tco);
     if (shade) {
-      svg.append(svgElement("path", { d: shade, fill: "rgba(53,224,139,.10)", stroke: "none" }));
+      svg.append(svgElement("path", {
+        d: shade, fill: tone[view.p2p], "fill-opacity": .13, stroke: "none",
+      }));
     }
   }
 
@@ -467,7 +501,7 @@ function renderChart(points) {
     const volumeGroup = svgElement("g");
     points.forEach((point, index) => {
       const x = geo.xOf(index);
-      [["volVenta", "#35e08b", -1], ["volCompra", "#46c8ea", 1]].forEach(([key, color, dir]) => {
+      [["volVenta", tone.p2pVenta, -1], ["volCompra", tone.p2pCompra, 1]].forEach(([key, color, dir]) => {
         const value = point[key];
         if (!value) return;
         const y = geo.yVol(value);
@@ -494,7 +528,7 @@ function renderChart(points) {
     svg.append(svgElement("path", {
       d,
       fill: "none",
-      stroke: serie.color,
+      stroke: tone[serie.id],
       "stroke-width": serie.width,
       "stroke-linecap": "round",
       "stroke-linejoin": "round",
@@ -504,7 +538,7 @@ function renderChart(points) {
     const marker = edge.find((item) => item.serie.id === serie.id);
     if (marker && !serie.dash) {
       svg.append(svgElement("circle", {
-        cx: geo.xOf(marker.index).toFixed(1), cy: marker.anchor.toFixed(1), r: 3.4, fill: serie.color,
+        cx: geo.xOf(marker.index).toFixed(1), cy: marker.anchor.toFixed(1), r: 3.4, fill: tone[serie.id],
       }));
     }
   });
@@ -516,11 +550,11 @@ function renderChart(points) {
     svg.append(svgElement("rect", {
       x: x.toFixed(1), y: (item.y - 8).toFixed(1),
       width: Math.max(38, text.length * 7.2), height: 16, rx: 4,
-      fill: "rgba(7,22,19,.9)", stroke: item.serie.color, "stroke-width": .8, opacity: .96,
+      fill: tone.panel, stroke: tone[item.serie.id], "stroke-width": .8, opacity: .96,
     }));
     const tag = svgElement("text", {
       x: (x + 5).toFixed(1), y: (item.y + 3.6).toFixed(1),
-      fill: item.serie.color, "font-size": 11, "font-weight": 700,
+      fill: tone[item.serie.id], "font-size": 11, "font-weight": 700,
       "font-family": "JetBrains Mono, monospace",
     });
     tag.textContent = text;
@@ -594,12 +628,13 @@ function showTooltip(event) {
     crosshair.setAttribute("visibility", "visible");
   }
 
+  const tone = palette();
   const rows = [];
-  SERIES.forEach((serie) => {
+  sideSeries().forEach((serie) => {
     if (!state.visible[serie.id]) return;
     const value = point[serie.id];
     if (value == null || !Number.isFinite(Number(value))) return;
-    rows.push(`<div class="tip-row"><span><i class="dot" style="background:${serie.color}"></i>${serie.label}</span><b>Bs ${priceFormat.format(value)}</b></div>`);
+    rows.push(`<div class="tip-row"><span><i class="dot" style="background:${tone[serie.id]}"></i>${serie.label}</span><b>Bs ${priceFormat.format(value)}</b></div>`);
   });
   if (state.showVolume && (point.volVenta || point.volCompra)) {
     rows.push(`<div class="tip-row"><span>Vol. estimado</span><b>${compactFormat.format(point.volVenta + point.volCompra)} ${state.asset}</b></div>`);
@@ -698,13 +733,14 @@ function renderFrequencySelector() {
 
 function renderLegend() {
   const host = $("#legend");
+  const tone = palette();
   host.textContent = "";
-  SERIES.forEach((serie) => {
+  sideSeries().forEach((serie) => {
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.serie = serie.id;
     button.setAttribute("aria-pressed", String(state.visible[serie.id]));
-    button.innerHTML = `<i class="swatch${serie.dash ? " dash" : ""}" style="${serie.dash ? `color:${serie.color}` : `background:${serie.color}`}"></i>${serie.label}`;
+    button.innerHTML = `<i class="swatch${serie.dash ? " dash" : ""}" style="${serie.dash ? `color:${tone[serie.id]}` : `background:${tone[serie.id]}`}"></i>${serie.label}`;
     host.append(button);
   });
 
@@ -712,7 +748,7 @@ function renderLegend() {
   volume.type = "button";
   volume.dataset.serie = "volume";
   volume.setAttribute("aria-pressed", String(state.showVolume));
-  volume.innerHTML = '<i class="swatch bar" style="background:#35e08b"></i>Volumen';
+  volume.innerHTML = `<i class="swatch bar" style="background:${tone[SIDE_VIEW[state.side].p2p]}"></i>Volumen`;
   host.append(volume);
 }
 
@@ -726,6 +762,9 @@ function syncControls() {
   });
   document.querySelectorAll("#range-selector button").forEach((button) => {
     button.classList.toggle("active", Number(button.dataset.range) === state.rangeDays);
+  });
+  document.querySelectorAll("#side-selector button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.side === state.side);
   });
   renderFrequencySelector();
   renderLegend();
@@ -865,6 +904,15 @@ function bindEvents() {
     savePreferences();
     syncControls();
     refresh();
+  });
+
+  $("#side-selector").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-side]");
+    if (!button || button.dataset.side === state.side) return;
+    state.side = button.dataset.side;
+    savePreferences();
+    syncControls();
+    if (!state.loading) paint();
   });
 
   $("#legend").addEventListener("click", (event) => {

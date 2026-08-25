@@ -23,10 +23,49 @@
   --up: #35e08b;
   --down: #ff6b6b;
 
+  --deco-line: rgba(126, 231, 178, .045);
+  --deco-glow: rgba(31, 156, 96, .20);
+  --deco-a: rgba(126, 231, 178, .55);
+  --deco-b: rgba(126, 231, 178, .35);
+  --deco-c: rgba(70, 200, 234, .28);
+  --grid-line: rgba(126, 231, 178, .07);
+
   --r-lg: 18px;
   --r-md: 14px;
   --r-sm: 10px;
   --shadow: 0 18px 40px rgba(0, 0, 0, .38);
+}
+
+/* USDC conserva la identidad celeste definida antes: el acento pasa a azul y la
+   segunda serie a verde suave, manteniendo dos colores bien distinguibles. */
+:root[data-asset="USDC"] {
+  --bg: #041018;
+  --bg-2: #061924;
+  --panel: #08202e;
+  --panel-2: #0a2637;
+  --panel-3: #0d2c40;
+  --line: rgba(88, 198, 236, .13);
+  --line-soft: rgba(88, 198, 236, .07);
+
+  --green: #3ac8ff;
+  --green-dim: #2f9fcd;
+  --green-soft: rgba(58, 200, 255, .15);
+  --cyan: #7ee0b4;
+  --cyan-soft: rgba(126, 224, 180, .14);
+  --tco: #dbe9f2;
+  --tco-2: #8aa6b6;
+
+  --ink: #eaf9ff;
+  --ink-2: #a4c3d2;
+  --ink-3: #7295a6;
+  --up: #3ac8ff;
+
+  --deco-line: rgba(88, 198, 236, .05);
+  --deco-glow: rgba(24, 118, 168, .22);
+  --deco-a: rgba(88, 198, 236, .55);
+  --deco-b: rgba(88, 198, 236, .35);
+  --deco-c: rgba(126, 224, 180, .26);
+  --grid-line: rgba(88, 198, 236, .08);
 }
 
 * { box-sizing: border-box; }
@@ -64,8 +103,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(126, 231, 178, .045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(126, 231, 178, .045) 1px, transparent 1px);
+    linear-gradient(var(--deco-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--deco-line) 1px, transparent 1px);
   background-size: 64px 64px;
   mask-image: radial-gradient(ellipse 90% 60% at 50% 18%, #000 30%, transparent 78%);
 }
@@ -77,7 +116,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   width: min(1100px, 130vw);
   height: 70vh;
   transform: translateX(-50%);
-  background: radial-gradient(ellipse at center, rgba(31, 156, 96, .20), transparent 66%);
+  background: radial-gradient(ellipse at center, var(--deco-glow), transparent 66%);
 }
 
 .backdrop-andes {
@@ -88,9 +127,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
   height: 220px;
   opacity: .16;
   background:
-    linear-gradient(58deg, transparent 49.4%, rgba(126, 231, 178, .55) 49.4%, rgba(126, 231, 178, .55) 50%, transparent 50%),
-    linear-gradient(-58deg, transparent 49.4%, rgba(126, 231, 178, .35) 49.4%, rgba(126, 231, 178, .35) 50%, transparent 50%),
-    linear-gradient(48deg, transparent 49.6%, rgba(70, 200, 234, .28) 49.6%, rgba(70, 200, 234, .28) 50%, transparent 50%);
+    linear-gradient(58deg, transparent 49.4%, var(--deco-a) 49.4%, var(--deco-a) 50%, transparent 50%),
+    linear-gradient(-58deg, transparent 49.4%, var(--deco-b) 49.4%, var(--deco-b) 50%, transparent 50%),
+    linear-gradient(48deg, transparent 49.6%, var(--deco-c) 49.6%, var(--deco-c) 50%, transparent 50%);
   background-size: 200px 200px, 160px 160px, 260px 260px;
   background-position: 0 100%, 130px 100%, 300px 100%;
   background-repeat: no-repeat;
