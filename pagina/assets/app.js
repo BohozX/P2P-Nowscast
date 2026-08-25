@@ -76,6 +76,8 @@ const SERIES = [
 const SIDE_VIEW = {
   venta: { p2p: "p2pVenta", tco: "tcoVenta" },
   compra: { p2p: "p2pCompra", tco: "tcoCompra" },
+  /* Modo spread: compara los dos precios P2P entre si, sin el oficial. */
+  spread: { p2p: "p2pVenta", tco: "p2pCompra" },
 };
 
 function palette() {
@@ -92,8 +94,13 @@ function palette() {
 }
 
 function sideSeries() {
+  if (state.side === "spread") {
+    return SERIES.filter((serie) => serie.id === "p2pVenta" || serie.id === "p2pCompra");
+  }
   return SERIES.filter((serie) => serie.side === state.side);
 }
+
+const enSpread = () => state.side === "spread";
 
 const frequencyLabels = { "5m": "5 minutos", "1h": "1 hora", "1d": "1 día" };
 const integerFormat = new Intl.NumberFormat("es-BO", { maximumFractionDigits: 0 });
@@ -367,6 +374,13 @@ function renderDelta(node, change) {
   node.textContent = `${change >= 0 ? "▲" : "▼"} ${percentFormat.format(Math.abs(change))} %`;
 }
 
+/* Vigencia publicada justo antes de la ultima, para la variacion diaria. */
+function tcoPrevio() {
+  if (!state.tcoLatest) return null;
+  const fechas = [...state.tco.keys()].filter((f) => f < state.tcoLatest.vigencia).sort();
+  return fechas.length ? state.tco.get(fechas.at(-1)) : null;
+}
+
 function renderMetrics(rows) {
   $("#volume-unit").textContent = state.asset;
 
@@ -396,25 +410,45 @@ function renderMetrics(rows) {
   }
 
   /* Brecha del lado activo: precio P2P frente al TCO vigente del mismo lado. */
-  const etiqueta = state.side === "venta" ? "Venta" : "Compra";
-  $("#metric-gap-title").textContent = `Brecha ${etiqueta} · Bs.`;
-  const p2p = summaries[state.side].price;
-  const oficialLado = state.tcoLatest ? state.tcoLatest[state.side] : null;
-  if (p2p == null || oficialLado == null) {
+  if (enSpread()) {
+    $("#metric-gap-title").textContent = "Brecha P2P − TCO · Bs.";
     $("#metric-gap").textContent = "—";
-    $("#metric-gap-pct").textContent = "P2P frente al tipo de cambio oficial";
+    $("#metric-gap-pct").textContent = "Elige venta o compra para ver su brecha";
   } else {
-    const gap = Number(p2p) - Number(oficialLado);
-    $("#metric-gap").textContent = priceFormat.format(gap);
-    $("#metric-gap-pct").textContent = `${percentFormat.format((gap / Number(oficialLado)) * 100)} % sobre el TCO ${etiqueta}`;
+    const etiqueta = state.side === "venta" ? "Venta" : "Compra";
+    $("#metric-gap-title").textContent = `Brecha ${etiqueta} · Bs.`;
+    const p2p = summaries[state.side].price;
+    const oficialLado = state.tcoLatest ? state.tcoLatest[state.side] : null;
+    if (p2p == null || oficialLado == null) {
+      $("#metric-gap").textContent = "—";
+      $("#metric-gap-pct").textContent = "P2P frente al tipo de cambio oficial";
+    } else {
+      const gap = Number(p2p) - Number(oficialLado);
+      $("#metric-gap").textContent = priceFormat.format(gap);
+      $("#metric-gap-pct").textContent = `${percentFormat.format((gap / Number(oficialLado)) * 100)} % sobre el TCO ${etiqueta}`;
+    }
   }
 
   const official = state.tcoLatest;
-  const stamp = official ? `Vigencia ${dayFormat.format(new Date(`${official.vigencia}T12:00:00Z`))}` : "";
-  $("#metric-tco-venta").textContent = official?.venta == null ? "—" : tcoFormat.format(official.venta);
-  $("#metric-tco-compra").textContent = official?.compra == null ? "—" : tcoFormat.format(official.compra);
-  $("#metric-tco-venta-note").textContent = official ? stamp : "Banco Central de Bolivia";
-  $("#metric-tco-compra-note").textContent = official ? stamp : "Banco Central de Bolivia";
+  const previo = tcoPrevio();
+  const fecha = (iso) => dayFormat.format(new Date(`${iso}T12:00:00Z`));
+
+  ["venta", "compra"].forEach((lado) => {
+    const actual = official ? official[lado] : null;
+    $(`#metric-tco-${lado}`).textContent = actual == null ? "—" : tcoFormat.format(actual);
+    $(`#metric-tco-${lado}-stamp`).textContent = official ? fecha(official.vigencia) : "";
+
+    const anterior = previo ? previo[lado] : null;
+    if (actual == null || anterior == null) {
+      $(`#metric-tco-${lado}-note`).textContent = "Banco Central de Bolivia";
+      return;
+    }
+    const cambio = Number(actual) - Number(anterior);
+    const signo = cambio > 0 ? "▲" : cambio < 0 ? "▼" : "=";
+    const pct = Number(anterior) === 0 ? "" : ` · ${percentFormat.format((cambio / Number(anterior)) * 100)} %`;
+    $(`#metric-tco-${lado}-note`).textContent =
+      `${signo} ${priceFormat.format(Math.abs(cambio))}${pct} vs ${fecha(previo.vigencia)}`;
+  });
 }
 
 /* --------------------------------------------------------------- gráfico -- */
@@ -456,7 +490,9 @@ function chartGeometry(points, width, height) {
   const yOf = (value) => priceBottom - ((Number(value) - low) / (high - low)) * (priceBottom - priceTop);
 
   const maxVolume = withVolume
-    ? Math.max(1, ...points.map((point) => Math.max(point.volVenta, point.volCompra)))
+    ? Math.max(1, ...points.map((point) => (enSpread()
+      ? Math.max(point.volVenta || 0, point.volCompra || 0)
+      : (state.side === "venta" ? point.volVenta : point.volCompra) || 0)))
     : 1;
   const volumeBase = height - padBottom;
   const yVol = (value) => volumeBase - (value / maxVolume) * volumeHeight;
@@ -477,18 +513,65 @@ function linePath(points, geo, key) {
   return path.trim();
 }
 
-function gapPath(points, geo, upper, lower) {
-  const top = [];
-  const bottom = [];
+/* Devuelve dos conjuntos de poligonos: donde el P2P esta por encima del TCO y
+   donde esta por debajo. Se corta en cada cruce y en cada hueco de datos, de modo
+   que el relleno nunca salta de un tramo a otro con una linea recta ni mezcla
+   los dos sentidos en una sola mancha. */
+function gapShapes(points, geo, upper, lower) {
+  const valor = (point, key) => {
+    const raw = point[key];
+    return raw == null || !Number.isFinite(Number(raw)) ? null : Number(raw);
+  };
+
+  const arriba = [];
+  const abajo = [];
+  let tramo = null;
+  let signo = 0;
+
+  const cerrar = () => {
+    if (tramo && tramo.top.length >= 2) {
+      const d = `M${tramo.top.join(" L")} L${[...tramo.bottom].reverse().join(" L")} Z`;
+      (tramo.signo > 0 ? arriba : abajo).push(d);
+    }
+    tramo = null;
+    signo = 0;
+  };
+
   points.forEach((point, index) => {
-    const a = point[upper];
-    const b = point[lower];
-    if (a == null || b == null) return;
-    top.push(`${geo.xOf(index).toFixed(1)} ${geo.yOf(a).toFixed(1)}`);
-    bottom.push(`${geo.xOf(index).toFixed(1)} ${geo.yOf(b).toFixed(1)}`);
+    const a = valor(point, upper);
+    const b = valor(point, lower);
+    if (a === null || b === null) { cerrar(); return; }
+
+    const x = geo.xOf(index);
+    const s = a === b ? signo : Math.sign(a - b);
+
+    if (tramo && s !== 0 && signo !== 0 && s !== signo) {
+      // cruce: se interpola el punto exacto donde ambas series se tocan
+      const prev = points[index - 1];
+      const pa = valor(prev, upper);
+      const pb = valor(prev, lower);
+      const t = (pa - pb) / ((pa - pb) - (a - b));
+      const xc = geo.xOf(index - 1) + (x - geo.xOf(index - 1)) * t;
+      const yc = geo.yOf(pa + (a - pa) * t);
+      tramo.top.push(`${xc.toFixed(1)} ${yc.toFixed(1)}`);
+      tramo.bottom.push(`${xc.toFixed(1)} ${yc.toFixed(1)}`);
+      cerrar();
+      tramo = { top: [`${xc.toFixed(1)} ${yc.toFixed(1)}`], bottom: [`${xc.toFixed(1)} ${yc.toFixed(1)}`], signo: s };
+      signo = s;
+    }
+
+    if (!tramo) {
+      tramo = { top: [], bottom: [], signo: s || 1 };
+      signo = s;
+    }
+    if (s !== 0 && signo === 0) { signo = s; tramo.signo = s; }
+
+    tramo.top.push(`${x.toFixed(1)} ${geo.yOf(a).toFixed(1)}`);
+    tramo.bottom.push(`${x.toFixed(1)} ${geo.yOf(b).toFixed(1)}`);
   });
-  if (top.length < 2) return "";
-  return `M${top.join(" L")} L${bottom.reverse().join(" L")} Z`;
+  cerrar();
+
+  return { arriba: arriba.join(" "), abajo: abajo.join(" ") };
 }
 
 function renderChart(points) {
@@ -547,31 +630,39 @@ function renderChart(points) {
   /* sombreado de la distancia entre el precio P2P y el TCO del lado elegido.
      Es solo relleno entre dos lineas ya dibujadas: no calcula ninguna brecha. */
   const view = SIDE_VIEW[state.side];
-  const shade = gapPath(points, geo, view.p2p, view.tco);
-  if (shade) {
+  const shade = gapShapes(points, geo, view.p2p, view.tco);
+  if (shade.arriba) {
     svg.append(svgElement("path", {
-      d: shade, fill: tone[view.p2p], "fill-opacity": .13, stroke: "none",
+      d: shade.arriba, fill: tone[view.p2p], "fill-opacity": .14, stroke: "none",
+    }));
+  }
+  if (shade.abajo) {
+    svg.append(svgElement("path", {
+      d: shade.abajo, fill: "#ff6b6b", "fill-opacity": .13, stroke: "none",
     }));
   }
 
   /* barras de volumen */
   if (geo.withVolume) {
-    const density = points.length;
-    const slot = (width - 8 - geo.padRight) / Math.max(density, 1);
-    const barWidth = clamp(slot * 0.42, 1.5, 13);
+    /* Solo el volumen del lado que se esta viendo; en modo spread, los dos. */
+    const barras = enSpread()
+      ? [["volVenta", tone.p2pVenta, -1], ["volCompra", tone.p2pCompra, 1]]
+      : [[state.side === "venta" ? "volVenta" : "volCompra", tone[SIDE_VIEW[state.side].p2p], 0]];
+    const slot = (width - 8 - geo.padRight) / Math.max(points.length, 1);
+    const barWidth = clamp(slot * (enSpread() ? 0.4 : 0.72), 1.5, 22);
     const volumeGroup = svgElement("g");
     points.forEach((point, index) => {
       const x = geo.xOf(index);
-      [["volVenta", tone.p2pVenta, -1], ["volCompra", tone.p2pCompra, 1]].forEach(([key, color, dir]) => {
+      barras.forEach(([key, color, dir]) => {
         const value = point[key];
         if (!value) return;
         const y = geo.yVol(value);
         volumeGroup.append(svgElement("rect", {
-          x: (x + dir * barWidth * 0.52 - barWidth / 2).toFixed(1),
+          x: (x + dir * barWidth * 0.55 - barWidth / 2).toFixed(1),
           y: y.toFixed(1),
           width: barWidth.toFixed(1),
           height: Math.max(1.5, geo.volumeBase - y).toFixed(1),
-          fill: color, opacity: .55, rx: Math.min(2, barWidth / 3),
+          fill: color, opacity: .5, rx: Math.min(2, barWidth / 3),
         }));
       });
     });
@@ -702,13 +793,20 @@ function showTooltip(event) {
   const pTco = point[view.tco];
   if (pP2p != null && pTco != null && Number(pTco) !== 0) {
     const gap = Number(pP2p) - Number(pTco);
-    rows.push(`<div class="tip-row"><span>Brecha</span><b>Bs ${priceFormat.format(gap)} · ${percentFormat.format((gap / Number(pTco)) * 100)} %</b></div>`);
+    const nombre = enSpread() ? "Spread P2P" : "Brecha";
+    rows.push(`<div class="tip-row"><span>${nombre}</span><b>Bs ${priceFormat.format(gap)} · ${percentFormat.format((gap / Number(pTco)) * 100)} %</b></div>`);
   }
-  if (state.showVolume && (point.volVenta || point.volCompra)) {
-    rows.push(`<div class="tip-row"><span>Vol. estimado</span><b>${compactFormat.format(point.volVenta + point.volCompra)} ${state.asset}</b></div>`);
+  const vol = enSpread()
+    ? (point.volVenta || 0) + (point.volCompra || 0)
+    : (state.side === "venta" ? point.volVenta : point.volCompra);
+  const tx = enSpread()
+    ? (point.txVenta || 0) + (point.txCompra || 0)
+    : (state.side === "venta" ? point.txVenta : point.txCompra);
+  if (state.showVolume && vol) {
+    rows.push(`<div class="tip-row"><span>Vol. estimado</span><b>${compactFormat.format(vol)} ${state.asset}</b></div>`);
   }
-  if (point.txVenta || point.txCompra) {
-    rows.push(`<div class="tip-row"><span>Trans. estimadas</span><b>${integerFormat.format(point.txVenta + point.txCompra)}</b></div>`);
+  if (tx) {
+    rows.push(`<div class="tip-row"><span>Trans. estimadas</span><b>${integerFormat.format(tx)}</b></div>`);
   }
 
   const tooltip = $("#chart-tooltip");
@@ -752,7 +850,7 @@ function showLoading() {
   /* la captura anterior no se conserva en pantalla */
   $("#market-chart").textContent = "";
   ["#metric-price-venta", "#metric-price-compra", "#metric-tco-venta", "#metric-tco-compra",
-    "#metric-spread", "#metric-volume-venta", "#metric-volume-compra",
+    "#metric-spread", "#metric-gap", "#metric-volume-venta", "#metric-volume-compra",
     "#metric-transactions-venta", "#metric-transactions-compra"].forEach((id) => {
     $(id).textContent = "—";
   });
@@ -761,8 +859,10 @@ function showLoading() {
     $(id).classList.remove("up", "down");
   });
   $("#metric-spread-pct").textContent = "—";
-  $("#as-of").textContent = "—";
-  $("#as-of-rel").textContent = "";
+  $("#metric-gap-pct").textContent = "—";
+  ["#metric-tco-venta-stamp", "#metric-tco-compra-stamp"].forEach((id) => {
+    $(id).textContent = "";
+  });
   $("#foot-capture").textContent = "Última captura: —";
 }
 
@@ -805,11 +905,12 @@ function renderLegend() {
   const host = $("#legend");
   const tone = palette();
   host.textContent = "";
+  const activas = new Set(sideSeries().map((serie) => serie.id));
   SERIES.forEach((serie) => {
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.serie = serie.id;
-    button.setAttribute("aria-pressed", String(serie.side === state.side));
+    button.setAttribute("aria-pressed", String(activas.has(serie.id)));
     button.innerHTML = `<i class="swatch${serie.dash ? " dash" : ""}" style="${serie.dash ? `color:${tone[serie.id]}` : `background:${tone[serie.id]}`}"></i>${serie.label}`;
     host.append(button);
   });
@@ -820,6 +921,19 @@ function renderLegend() {
   volume.setAttribute("aria-pressed", String(state.showVolume));
   volume.innerHTML = `<i class="swatch bar" style="background:${tone[SIDE_VIEW[state.side].p2p]}"></i>Volumen`;
   host.append(volume);
+
+  /* Boton compacto: compara los dos precios P2P entre si. */
+  const spread = document.createElement("button");
+  spread.type = "button";
+  spread.className = "legend-icon";
+  spread.dataset.serie = "spread";
+  spread.setAttribute("aria-pressed", String(enSpread()));
+  spread.setAttribute("aria-label", "Comparar precio de venta y de compra P2P");
+  spread.dataset.tip = "Spread P2P: compara el precio de venta y el de compra entre si";
+  spread.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M3 8h18M3 16h18"></path><path d="M12 5v3M12 16v3"></path>
+    <path d="M9.5 6.5L12 4l2.5 2.5M9.5 17.5L12 20l2.5-2.5"></path></svg>`;
+  host.append(spread);
 }
 
 function syncControls() {
@@ -893,10 +1007,13 @@ async function refresh() {
   $("#error-state").hidden = true;
 
   if (asOf) {
-    $("#as-of").textContent = fullDateFormat.format(new Date(asOf));
-    $("#as-of-rel").textContent = relativeLabel(asOf);
-    $("#foot-capture").textContent = `Última captura: ${fullDateFormat.format(new Date(asOf))}`;
-    $("#status-capture").textContent = fullDateFormat.format(new Date(asOf));
+    const completa = fullDateFormat.format(new Date(asOf));
+    $("#foot-capture").textContent = `Última captura: ${completa}`;
+    $("#status-capture").textContent = completa;
+    $("#status-rel").textContent = relativeLabel(asOf) || "—";
+    setStatus(tcoError ? "loading" : "ok", `Última captura · ${shortDateFormat.format(new Date(asOf))}`);
+  } else {
+    setStatus("error", "Sin captura");
   }
   $("#status-freq").textContent = frequencyLabels[state.frequency] || state.frequency;
   $("#status-tco").textContent = tcoError
@@ -905,7 +1022,6 @@ async function refresh() {
       ? `Bs ${tcoFormat.format(state.tcoLatest.compra)} / ${tcoFormat.format(state.tcoLatest.venta)}`
       : "—";
 
-  setStatus(tcoError ? "loading" : "ok", tcoError ? "Datos parciales" : "Datos actualizados");
   paint();
 }
 
@@ -978,9 +1094,12 @@ function bindEvents() {
     const id = button.dataset.serie;
     if (id === "volume") {
       state.showVolume = !state.showVolume;
+    } else if (id === "spread") {
+      state.side = enSpread() ? "venta" : "spread";
     } else {
       const serie = SERIES.find((item) => item.id === id);
-      if (!serie || serie.side === state.side) return;
+      if (!serie) return;
+      if (!enSpread() && serie.side === state.side) return;
       state.side = serie.side;
     }
     savePreferences();
@@ -1016,7 +1135,7 @@ function bindEvents() {
   });
 
   window.setInterval(() => {
-    if (state.asOf) $("#as-of-rel").textContent = relativeLabel(state.asOf);
+    if (state.asOf) $("#status-rel").textContent = relativeLabel(state.asOf) || "—";
   }, 60000);
 }
 

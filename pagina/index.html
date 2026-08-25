@@ -21,7 +21,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap">
-    <link rel="stylesheet" href="assets/styles.css?v=20260825-ui7">
+    <link rel="stylesheet" href="assets/styles.css?v=20260825-ui8">
   </head>
   <body>
     <div class="backdrop" aria-hidden="true">
@@ -51,6 +51,7 @@
               <p class="status-panel-title">Estado de los datos</p>
               <dl>
                 <div><dt>Última captura</dt><dd id="status-capture">—</dd></div>
+                <div><dt>Antigüedad</dt><dd id="status-rel">—</dd></div>
                 <div><dt>Resolución</dt><dd id="status-freq">—</dd></div>
                 <div><dt>Tipo de cambio oficial</dt><dd id="status-tco">—</dd></div>
               </dl>
@@ -76,12 +77,6 @@
               de USDT y USDC en Binance y Bybit, expresados en bolivianos.
             </p>
           </div>
-
-          <aside class="capture-card">
-            <span>Última captura</span>
-            <strong id="as-of">—</strong>
-            <em id="as-of-rel"></em>
-          </aside>
         </section>
 
         <section class="dashboard" aria-labelledby="dashboard-title">
@@ -111,13 +106,13 @@
             </article>
 
             <article class="metric-card accent-tco">
-              <span class="metric-title">TCO Venta · Bs.</span>
+              <span class="metric-title">TCO Venta · Bs.<em class="stamp" id="metric-tco-venta-stamp"></em></span>
               <strong id="metric-tco-venta">—</strong>
               <span class="metric-note" id="metric-tco-venta-note">Banco Central de Bolivia</span>
             </article>
 
             <article class="metric-card accent-tco">
-              <span class="metric-title">TCO Compra · Bs.</span>
+              <span class="metric-title">TCO Compra · Bs.<em class="stamp" id="metric-tco-compra-stamp"></em></span>
               <strong id="metric-tco-compra">—</strong>
               <span class="metric-note" id="metric-tco-compra-note">Banco Central de Bolivia</span>
             </article>
@@ -237,6 +232,6 @@
 
     <div class="tip-bubble" id="tip-bubble" hidden></div>
 
-    <script src="assets/app.js?v=20260825-ui7" defer></script>
+    <script src="assets/app.js?v=20260825-ui8" defer></script>
   </body>
 </html>
