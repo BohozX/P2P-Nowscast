@@ -837,9 +837,6 @@ function showTooltip(event) {
   if (tx) {
     rows.push(`<div class="tip-row"><span>Trans. estimadas</span><b>${integerFormat.format(tx)}</b></div>`);
   }
-  if (point.arrastrado && !vol) {
-    rows.push('<div class="tip-row tip-nota"><span>Sin operaciones en este bloque</span></div>');
-  }
 
   const tooltip = $("#chart-tooltip");
   tooltip.innerHTML = `<h4>${fullDateFormat.format(new Date(point.time))}</h4>${rows.join("")}`;
