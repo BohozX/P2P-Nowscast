@@ -143,8 +143,8 @@ const enSpread = () => state.side === "spread";
 const frequencyLabels = { "5m": "5 minutos", "1h": "1 hora", "1d": "1 día" };
 const integerFormat = new Intl.NumberFormat("es-BO", { maximumFractionDigits: 0 });
 const priceFormat = new Intl.NumberFormat("es-BO", {
-  minimumFractionDigits: 3,
-  maximumFractionDigits: 3,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 });
 const tcoFormat = new Intl.NumberFormat("es-BO", {
   minimumFractionDigits: 2,
