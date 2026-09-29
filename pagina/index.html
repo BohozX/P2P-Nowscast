@@ -21,7 +21,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap">
-    <link rel="stylesheet" href="assets/styles.css?v=20260825-ui13">
+    <link rel="stylesheet" href="assets/styles.css?v=20260929-bancos1">
   </head>
   <body>
     <div class="backdrop" aria-hidden="true">
@@ -77,6 +77,13 @@
               de USDT y USDC en Binance y Bybit, expresados en bolivianos.
             </p>
           </div>
+          <a class="cta-bancos" id="cta-bancos" href="#bancos">
+            <span class="cta-brillo" aria-hidden="true"></span>
+            <span class="cta-punto" aria-hidden="true"></span>
+            <span>Tipo de cambio en bancos</span>
+            <em>Nuevo</em>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M6 13l6 6 6-6"></path></svg>
+          </a>
         </section>
 
         <section class="dashboard" aria-labelledby="dashboard-title">
@@ -196,6 +203,46 @@
           </article>
         </section>
 
+        <section class="bancos" id="bancos" aria-labelledby="bancos-title">
+          <div class="dashboard-head">
+            <div>
+              <p class="section-kicker">Sistema financiero · USD</p>
+              <h2 id="bancos-title">Tipo de cambio en bancos</h2>
+            </div>
+            <div class="segmented" id="bancos-rango" role="group" aria-label="Periodo de los gráficos de bancos">
+              <button class="active" type="button" data-dias="7" aria-pressed="true">7D</button>
+              <button type="button" data-dias="30" aria-pressed="false">30D</button>
+            </div>
+          </div>
+
+          <p class="bancos-copy">
+            Compra y venta del dólar que publica cada entidad financiera en su sitio web, consultadas
+            cada hora, frente al tipo de cambio oficial del Banco Central de Bolivia.
+            <span id="bancos-consulta"></span>
+          </p>
+
+          <div class="bancos-leyenda" aria-hidden="true">
+            <span><i class="venta"></i>Venta</span>
+            <span><i class="compra"></i>Compra</span>
+            <span><i class="tco-venta"></i>TCO venta</span>
+            <span><i class="tco-compra"></i>TCO compra</span>
+            <span><i class="brecha"></i>Brecha de venta frente al TCO</span>
+          </div>
+
+          <p class="bancos-estado" id="bancos-estado" hidden></p>
+          <div class="bancos-grid" id="bancos-grid"></div>
+
+          <article class="chart-card bancos-resumen">
+            <div class="bancos-resumen-head">
+              <h3>Últimos 7 días · USD</h3>
+              <p>Valor vigente al cierre de cada día: venta arriba, compra abajo. ▲▼ marca los días en que la entidad cambió su venta.</p>
+            </div>
+            <div class="tabla-scroll">
+              <table class="bancos-tabla" id="bancos-tabla"></table>
+            </div>
+          </article>
+        </section>
+
         <section class="methodology">
           <details id="methodology-box">
             <summary>
@@ -223,7 +270,7 @@
         </section>
 
         <footer class="page-foot">
-          <span>Fuentes: Binance P2P · Bybit P2P · Banco Central de Bolivia</span>
+          <span>Fuentes: Binance P2P · Bybit P2P · Banco Central de Bolivia · sitios web de las entidades financieras</span>
           <span>Datos de mercado estimados a partir de anuncios públicos.</span>
           <span id="foot-capture">Última captura: —</span>
         </footer>
@@ -233,5 +280,6 @@
     <div class="tip-bubble" id="tip-bubble" hidden></div>
 
     <script src="assets/app.js?v=20260825-ui13" defer></script>
+    <script src="assets/bancos.js?v=20260929-bancos1" defer></script>
   </body>
 </html>
