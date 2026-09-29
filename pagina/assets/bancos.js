@@ -2,35 +2,48 @@
   const URL_BANCOS = "https://raw.githubusercontent.com/BohozX/TC-BANCOS/main/ultimos_30_dias.csv";
   const URL_TCO = "https://raw.githubusercontent.com/BohozX/TCO-BCB/main/datos/tco.csv";
   const DIA = 86_400_000;
+  const HORA = 3_600_000;
   const DIAS_TABLA = 7;
   const zona = "America/La_Paz";
+  const CLAVE = "p2p-nowcast-bancos";
 
   const NOMBRES = {
-    "BANCO BISA": "Banco BISA",
-    "BANCO DE CRÉDITO": "Banco de Crédito (BCP)",
-    "BANCO DE LA NACIÓN ARGENTINA": "Banco de la Nación Argentina",
-    "BANCO ECONÓMICO": "Banco Económico",
-    "BANCO FIE": "Banco FIE",
-    "BANCO FORTALEZA": "Banco Fortaleza",
-    "BANCO GANADERO": "Banco Ganadero",
-    "BANCO MERCANTIL SANTA CRUZ": "Banco Mercantil Santa Cruz",
-    "BANCO NACIONAL DE BOLIVIA": "Banco Nacional de Bolivia",
-    "BANCO PRODEM": "Banco Prodem",
-    "BANCO PYME DE LA COMUNIDAD": "Banco PyME de la Comunidad",
-    "BANCO PYME ECOFUTURO": "Banco PyME Ecofuturo",
-    "BANCO SOLIDARIO": "Banco Solidario",
-    "BANCO UNION": "Banco Unión",
-    "IDEPRO IFD": "IDEPRO IFD",
+    "BANCO BISA": ["Banco BISA", "BISA"],
+    "BANCO DE CRÉDITO": ["Banco de Crédito (BCP)", "BCP"],
+    "BANCO DE LA NACIÓN ARGENTINA": ["Banco de la Nación Argentina", "BNA"],
+    "BANCO ECONÓMICO": ["Banco Económico", "Económico"],
+    "BANCO FIE": ["Banco FIE", "FIE"],
+    "BANCO FORTALEZA": ["Banco Fortaleza", "Fortaleza"],
+    "BANCO GANADERO": ["Banco Ganadero", "Ganadero"],
+    "BANCO MERCANTIL SANTA CRUZ": ["Banco Mercantil Santa Cruz", "Mercantil"],
+    "BANCO NACIONAL DE BOLIVIA": ["Banco Nacional de Bolivia", "BNB"],
+    "BANCO PRODEM": ["Banco Prodem", "Prodem"],
+    "BANCO PYME DE LA COMUNIDAD": ["Banco PyME de la Comunidad", "Comunidad"],
+    "BANCO PYME ECOFUTURO": ["Banco PyME Ecofuturo", "Ecofuturo"],
+    "BANCO SOLIDARIO": ["Banco Solidario", "BancoSol"],
+    "BANCO UNION": ["Banco Unión", "Unión"],
+    "IDEPRO IFD": ["IDEPRO IFD", "IDEPRO"],
   };
 
+  const SERIES = [
+    { id: "venta", etiqueta: "Venta", clase: "venta", lado: "venta" },
+    { id: "compra", etiqueta: "Compra", clase: "compra", lado: "compra" },
+    { id: "tcoVenta", etiqueta: "TCO Venta", clase: "tco-venta", lado: "venta", dash: true },
+    { id: "tcoCompra", etiqueta: "TCO Compra", clase: "tco-compra", lado: "compra", dash: true },
+  ];
+  const VISTAS = { venta: ["venta", "tcoVenta"], compra: ["compra", "tcoCompra"], spread: ["venta", "compra"] };
+
   const fmtPrecio = new Intl.NumberFormat("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  const fmtEje = new Intl.NumberFormat("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtDif = new Intl.NumberFormat("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" });
+  const fmtPct = new Intl.NumberFormat("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtLargo = new Intl.DateTimeFormat("es-BO", { timeZone: zona, day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
   const fmtHora = new Intl.DateTimeFormat("es-BO", { timeZone: zona, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
-  const fmtDiaCorto = new Intl.DateTimeFormat("es-BO", { timeZone: zona, day: "2-digit", month: "short" });
+  const fmtDia = new Intl.DateTimeFormat("es-BO", { timeZone: zona, day: "2-digit", month: "short" });
   const fmtDiaTabla = new Intl.DateTimeFormat("es-BO", { timeZone: zona, weekday: "short", day: "2-digit", month: "short" });
   const fmtIso = new Intl.DateTimeFormat("en-CA", { timeZone: zona, year: "numeric", month: "2-digit", day: "2-digit" });
 
-  const estado = { dias: 7, bancos: [], tco: new Map(), fin: null, inicio: null, cargando: false };
+  const estado = { banco: null, dias: 7, lado: "venta", bancos: [], tco: new Map(), fin: null, inicio: null, cargando: false, geo: null };
   const $b = (sel) => document.querySelector(sel);
   const NS = "http://www.w3.org/2000/svg";
 
@@ -44,6 +57,26 @@
     return Number.isFinite(x) ? x : null;
   };
   const precio = (v) => (v == null ? "—" : fmtPrecio.format(v));
+  const acotar = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+  function restaurar() {
+    try {
+      const g = JSON.parse(window.localStorage.getItem(CLAVE) || "{}");
+      if ([1, 7, 30].includes(g.dias)) estado.dias = g.dias;
+      if (Object.hasOwn(VISTAS, g.lado)) estado.lado = g.lado;
+      if (typeof g.banco === "string") estado.banco = g.banco;
+    } catch (error) {
+      estado.dias = 7;
+    }
+  }
+
+  function guardar() {
+    try {
+      window.localStorage.setItem(CLAVE, JSON.stringify({ banco: estado.banco, dias: estado.dias, lado: estado.lado }));
+    } catch (error) {
+      estado.dias = estado.dias || 7;
+    }
+  }
 
   function leerBancos(texto) {
     const lineas = texto.trim().split(/\r?\n/).map((l) => l.split(","));
@@ -60,8 +93,6 @@
       columnas.get(nombre)[etiqueta === "USD compra" ? "compra" : "venta"] = j;
     }
     const filas = lineas.slice(2).filter((f) => (f[0] || "").trim());
-    const fin = filas.length ? aTiempo(filas[filas.length - 1][0]) : null;
-    const inicio = filas.length ? aTiempo(filas[0][0]) : null;
     const bancos = [...columnas.entries()].map(([nombre, cols]) => {
       const puntos = [];
       filas.forEach((f) => {
@@ -70,9 +101,14 @@
         if (compra == null && venta == null) return;
         puntos.push({ t: aTiempo(f[0]), compra, venta });
       });
-      return { nombre, etiqueta: NOMBRES[nombre] || nombre, tieneCompra: cols.compra != null, puntos };
+      const [largo, corto] = NOMBRES[nombre] || [nombre, nombre];
+      return { nombre, largo, corto, tieneCompra: cols.compra != null, puntos };
     });
-    return { bancos, fin, inicio };
+    return {
+      bancos,
+      fin: filas.length ? aTiempo(filas[filas.length - 1][0]) : null,
+      inicio: filas.length ? aTiempo(filas[0][0]) : null,
+    };
   }
 
   function leerTco(texto) {
@@ -91,6 +127,8 @@
     return mapa;
   }
 
+  const bancoActual = () => estado.bancos.find((b) => b.nombre === estado.banco) || estado.bancos[0] || null;
+
   function vigente(banco, t) {
     let actual = null;
     for (const p of banco.puntos) {
@@ -98,6 +136,13 @@
       actual = p;
     }
     return actual;
+  }
+
+  function rango() {
+    const t1 = estado.fin;
+    let t0 = Math.max(t1 - estado.dias * DIA, estado.inicio);
+    if (t1 - t0 < 60_000) t0 = t1 - HORA;
+    return [t0, t1];
   }
 
   function tramos(puntos, clave, t0, t1) {
@@ -121,7 +166,7 @@
     const segs = [];
     let dia = inicioDia(isoDe(t0));
     while (dia < t1) {
-      const valor = estado.tco.get(isoDe(dia + 3_600_000))?.[clave];
+      const valor = estado.tco.get(isoDe(dia + HORA))?.[clave];
       const a = Math.max(dia, t0);
       const b = Math.min(dia + DIA, t1);
       if (valor != null && b > a) segs.push({ a, b, y: valor });
@@ -151,135 +196,248 @@
     return el;
   }
 
-  function dibujar(card, banco) {
-    const svg = card.querySelector("svg");
-    const hover = card.querySelector(".banco-hover");
+  function texto(sel, valor) {
+    const el = $b(sel);
+    if (el) el.textContent = valor;
+    return el;
+  }
+
+  function delta(sel, actual, inicial) {
+    const el = $b(sel);
+    el.classList.remove("up", "down");
+    if (actual == null || inicial == null) {
+      el.textContent = "—";
+      return;
+    }
+    if (actual === inicial) {
+      el.textContent = "Sin cambios en el periodo";
+      return;
+    }
+    const pct = ((actual - inicial) / inicial) * 100;
+    el.classList.add(actual > inicial ? "up" : "down");
+    el.textContent = `${actual > inicial ? "▲" : "▼"} ${fmtPct.format(Math.abs(pct))} %`;
+  }
+
+  function periodoTexto() {
+    return estado.dias === 1 ? "en las últimas 24 horas" : `en los últimos ${estado.dias} días`;
+  }
+
+  function metricas(banco) {
+    const [t0, t1] = rango();
+    const actual = vigente(banco, t1);
+    const inicial = vigente(banco, t0) || banco.puntos.find((p) => p.t >= t0) || null;
+    const tco = estado.tco.get(isoDe(t1));
+
+    texto("#banco-venta", precio(actual?.venta));
+    texto("#banco-compra", banco.tieneCompra ? precio(actual?.compra) : "No publica");
+    $b("#banco-compra").classList.toggle("sin-dato", !banco.tieneCompra);
+    delta("#banco-delta-venta", actual?.venta, inicial?.venta);
+    delta("#banco-delta-compra", actual?.compra, inicial?.compra);
+
+    texto("#banco-tco-venta", tco?.venta != null ? fmtEje.format(tco.venta) : "—");
+    texto("#banco-tco-compra", tco?.compra != null ? fmtEje.format(tco.compra) : "—");
+    texto("#banco-tco-venta-stamp", tco ? fmtDia.format(new Date(t1)) : "");
+    texto("#banco-tco-compra-stamp", tco ? fmtDia.format(new Date(t1)) : "");
+
+    const brechaV = actual?.venta != null && tco?.venta != null ? actual.venta - tco.venta : null;
+    texto("#banco-brecha-venta", brechaV == null ? "—" : fmtDif.format(brechaV));
+    texto("#banco-brecha-venta-pct", brechaV == null ? "Sin tipo de cambio oficial"
+      : `${fmtDif.format((brechaV / tco.venta) * 100)} % sobre el TCO Venta`);
+
+    const brechaC = actual?.compra != null && tco?.compra != null ? actual.compra - tco.compra : null;
+    texto("#banco-brecha-compra", brechaC == null ? "—" : fmtDif.format(brechaC));
+    texto("#banco-brecha-compra-pct", !banco.tieneCompra ? "La entidad no publica compra"
+      : brechaC == null ? "Sin tipo de cambio oficial" : `${fmtDif.format((brechaC / tco.compra) * 100)} % sobre el TCO Compra`);
+
+    const spread = actual?.venta != null && actual?.compra != null ? actual.venta - actual.compra : null;
+    texto("#banco-spread", spread == null ? "—" : fmtEje.format(spread));
+    texto("#banco-spread-pct", spread == null ? "La entidad no publica compra"
+      : `${fmtPct.format((spread / actual.compra) * 100)} % sobre el precio de compra`);
+
+    const cambios = banco.puntos.filter((p, i) => i > 0 && p.t > t0 && p.t <= t1).length;
+    texto("#banco-cambios", String(cambios));
+    texto("#banco-cambios-nota", periodoTexto());
+  }
+
+  function leyenda() {
+    const host = $b("#bancos-leyenda");
+    const activas = new Set(VISTAS[estado.lado]);
+    const banco = bancoActual();
+    host.replaceChildren();
+    SERIES.forEach((serie) => {
+      if (serie.id === "compra" && banco && !banco.tieneCompra) return;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.serie = serie.id;
+      b.setAttribute("aria-pressed", String(activas.has(serie.id)));
+      b.innerHTML = `<i class="swatch${serie.dash ? " dash" : ""} sw-${serie.clase}"></i>${serie.etiqueta}`;
+      host.appendChild(b);
+    });
+    if (!banco || banco.tieneCompra) {
+      const s = document.createElement("button");
+      s.type = "button";
+      s.className = "legend-icon";
+      s.dataset.serie = "spread";
+      s.setAttribute("aria-pressed", String(estado.lado === "spread"));
+      s.setAttribute("aria-label", "Comparar venta y compra de la entidad");
+      s.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 8h18M3 16h18"></path><path d="M12 5v3M12 16v3"></path>
+        <path d="M9.5 6.5L12 4l2.5 2.5M9.5 17.5L12 20l2.5-2.5"></path></svg>`;
+      host.appendChild(s);
+    }
+  }
+
+  function dibujar() {
+    const svg = $b("#banco-chart");
+    const vacio = $b("#bancos-vacio");
+    ocultarTip();
     svg.replaceChildren();
-    const ancho = Math.max(220, svg.clientWidth || 300);
-    const alto = 118;
+    const banco = bancoActual();
+    if (!banco) return;
+    if (!banco.tieneCompra && estado.lado !== "venta") estado.lado = "venta";
+
+    const ancho = svg.clientWidth || 600;
+    const alto = svg.clientHeight || 340;
     svg.setAttribute("viewBox", `0 0 ${ancho} ${alto}`);
-
-    const t1 = estado.fin;
-    let t0 = Math.max(t1 - estado.dias * DIA, estado.inicio);
-    if (t1 - t0 < 60_000) t0 = t1 - 3_600_000;
-
-    const series = {
+    const [t0, t1] = rango();
+    const s = {
       venta: tramos(banco.puntos, "venta", t0, t1),
       compra: tramos(banco.puntos, "compra", t0, t1),
       tcoVenta: tramosTco("venta", t0, t1),
       tcoCompra: tramosTco("compra", t0, t1),
     };
-    const valores = Object.values(series).flat().map((s) => s.y);
+    const [idA, idB] = VISTAS[estado.lado];
+    const valores = [...s[idA], ...s[idB]].map((x) => x.y);
+    vacio.hidden = valores.length > 0;
     if (!valores.length) {
-      hover.textContent = "Sin datos en el periodo";
+      estado.geo = null;
       return;
     }
+
     let lo = Math.min(...valores);
     let hi = Math.max(...valores);
-    const pad = Math.max((hi - lo) * 0.14, 0.06);
-    lo -= pad;
-    hi += pad;
+    if (lo === hi) {
+      lo -= 0.05;
+      hi += 0.05;
+    }
+    const margen = (hi - lo) * 0.12;
+    lo -= margen;
+    hi += margen;
 
-    const m = { l: 40, r: 6, t: 8, b: 17 };
-    const x = (t) => m.l + ((t - t0) / (t1 - t0)) * (ancho - m.l - m.r);
-    const y = (v) => m.t + (1 - (v - lo) / (hi - lo)) * (alto - m.t - m.b);
+    const pad = { l: 8, r: 58, t: 14, b: 26 };
+    const x = (t) => pad.l + ((t - t0) / (t1 - t0)) * (ancho - pad.l - pad.r);
+    const y = (v) => (alto - pad.b) - ((v - lo) / (hi - lo)) * (alto - pad.b - pad.t);
 
-    [lo + pad, hi - pad].forEach((v) => {
-      nodo("line", { x1: m.l, x2: ancho - m.r, y1: y(v).toFixed(1), y2: y(v).toFixed(1), class: "grid" }, svg);
-      nodo("text", { x: m.l - 5, y: (y(v) + 3).toFixed(1), class: "eje", "text-anchor": "end" }, svg).textContent = fmtPrecio.format(v);
-    });
+    const rejilla = nodo("g", {}, svg);
+    for (let paso = 0; paso <= 4; paso += 1) {
+      const v = lo + ((hi - lo) * paso) / 4;
+      nodo("line", { x1: 0, x2: ancho - pad.r + 4, y1: y(v).toFixed(1), y2: y(v).toFixed(1), class: "grid" }, rejilla);
+      nodo("text", { x: ancho - pad.r + 10, y: (y(v) + 3.5).toFixed(1), class: "eje" }, rejilla).textContent = fmtEje.format(v);
+    }
 
-    const cortes = [...new Set([t0, t1, ...series.venta.flatMap((s) => [s.a, s.b]), ...series.tcoVenta.flatMap((s) => [s.a, s.b])])]
+    const cortes = [...new Set([t0, t1, ...s[idA].flatMap((z) => [z.a, z.b]), ...s[idB].flatMap((z) => [z.a, z.b])])]
       .sort((a, b) => a - b);
+    const sombra = nodo("g", {}, svg);
     for (let i = 0; i < cortes.length - 1; i += 1) {
       const medio = (cortes[i] + cortes[i + 1]) / 2;
-      const vb = valorEn(series.venta, medio);
-      const vt = valorEn(series.tcoVenta, medio);
-      if (vb == null || vt == null || vb === vt) continue;
+      const va = valorEn(s[idA], medio);
+      const vb = valorEn(s[idB], medio);
+      if (va == null || vb == null || va === vb) continue;
       nodo("rect", {
-        x: x(cortes[i]).toFixed(1), width: Math.max(0.5, x(cortes[i + 1]) - x(cortes[i])).toFixed(1),
-        y: y(Math.max(vb, vt)).toFixed(1), height: Math.abs(y(vb) - y(vt)).toFixed(1), class: "brecha",
-      }, svg);
+        x: x(cortes[i]).toFixed(1),
+        width: Math.max(0.5, x(cortes[i + 1]) - x(cortes[i])).toFixed(1),
+        y: y(Math.max(va, vb)).toFixed(1),
+        height: Math.abs(y(va) - y(vb)).toFixed(1),
+        class: va > vb ? `s-${estado.lado === "compra" ? "compra" : "venta"}` : "s-baja",
+      }, sombra);
     }
 
-    [["tcoCompra", "l-tco-compra"], ["tcoVenta", "l-tco-venta"], ["compra", "l-compra"], ["venta", "l-venta"]]
-      .forEach(([clave, clase]) => {
-        const d = camino(series[clave], x, y);
-        if (d) nodo("path", { d, class: clase }, svg);
+    [idB, idA].forEach((id) => {
+      const serie = SERIES.find((z) => z.id === id);
+      const d = camino(s[id], x, y);
+      if (d) nodo("path", { d, class: `l-${serie.clase}` }, svg);
+      if (serie.dash) return;
+      const marcas = nodo("g", { class: `p-${serie.clase}` }, svg);
+      banco.puntos.forEach((p) => {
+        if (p.t < t0 || p.t > t1 || p[id] == null) return;
+        nodo("circle", { cx: x(p.t).toFixed(1), cy: y(p[id]).toFixed(1), r: 3 }, marcas);
       });
+      const ultimo = s[id].at(-1);
+      if (ultimo) nodo("circle", { cx: x(ultimo.b).toFixed(1), cy: y(ultimo.y).toFixed(1), r: 3.6, class: `fin p-${serie.clase}` }, svg);
+    });
 
-    nodo("text", { x: m.l, y: alto - 3, class: "eje" }, svg).textContent = fmtDiaCorto.format(new Date(t0));
-    nodo("text", { x: ancho - m.r, y: alto - 3, class: "eje", "text-anchor": "end" }, svg).textContent = fmtDiaCorto.format(new Date(t1));
+    const corto = t1 - t0 <= 3 * DIA;
+    const ejeX = nodo("g", {}, svg);
+    const vistos = [];
+    const marcasX = ancho < 480 ? 3 : 5;
+    for (let i = 0; i < marcasX; i += 1) {
+      const t = t0 + ((t1 - t0) * i) / (marcasX - 1);
+      let etiqueta = corto ? fmtHora.format(new Date(t)) : fmtDia.format(new Date(t));
+      if (!corto && vistos.includes(etiqueta)) etiqueta = fmtHora.format(new Date(t));
+      vistos.push(etiqueta);
+      nodo("text", {
+        x: x(t).toFixed(1), y: alto - 8, class: "eje-x",
+        "text-anchor": i === 0 ? "start" : i === marcasX - 1 ? "end" : "middle",
+      }, ejeX).textContent = etiqueta;
+    }
 
-    const cursor = nodo("line", { y1: m.t, y2: alto - m.b, class: "cursor", visibility: "hidden" }, svg);
-    const textoBase = hover.dataset.base;
-    hover.textContent = textoBase;
-
-    const mover = (ev) => {
-      const caja = svg.getBoundingClientRect();
-      const px = ((ev.clientX - caja.left) / caja.width) * ancho;
-      if (px < m.l || px > ancho - m.r) return;
-      const t = t0 + ((px - m.l) / (ancho - m.l - m.r)) * (t1 - t0);
-      cursor.setAttribute("x1", px.toFixed(1));
-      cursor.setAttribute("x2", px.toFixed(1));
-      cursor.setAttribute("visibility", "visible");
-      const partes = [fmtHora.format(new Date(t))];
-      const v = valorEn(series.venta, t);
-      const c = valorEn(series.compra, t);
-      const tv = valorEn(series.tcoVenta, t);
-      if (v != null) partes.push(`V ${precio(v)}`);
-      if (c != null) partes.push(`C ${precio(c)}`);
-      if (tv != null) partes.push(`TCO V ${precio(tv)}`);
-      hover.textContent = partes.join(" · ");
-    };
-    svg.onpointermove = mover;
-    svg.onpointerdown = mover;
-    svg.onpointerleave = () => {
-      cursor.setAttribute("visibility", "hidden");
-      hover.textContent = textoBase;
-    };
+    nodo("line", { id: "banco-cursor", x1: 0, x2: 0, y1: pad.t - 6, y2: alto - pad.b, class: "cursor", visibility: "hidden" }, svg);
+    estado.geo = { x, t0, t1, pad, ancho, s, idA, idB };
   }
 
-  function tarjeta(banco) {
-    const card = document.createElement("article");
-    card.className = "banco-card";
-    const actual = vigente(banco, estado.fin);
-    const tco = estado.tco.get(isoDe(estado.fin));
-    const brecha = actual?.venta != null && tco?.venta != null ? actual.venta - tco.venta : null;
-    const pct = brecha != null ? (brecha / tco.venta) * 100 : null;
-    const spread = actual?.venta != null && actual?.compra != null ? actual.venta - actual.compra : null;
+  function ocultarTip() {
+    const tip = $b("#banco-tooltip");
+    if (tip) tip.hidden = true;
+    document.getElementById("banco-cursor")?.setAttribute("visibility", "hidden");
+  }
 
-    card.innerHTML = `
-      <header>
-        <strong></strong>
-        <span class="banco-desde"></span>
-      </header>
-      <div class="banco-precios">
-        <div class="venta"><small><i></i>Venta</small><b></b></div>
-        <div class="compra"><small><i></i>Compra</small><b></b></div>
-      </div>
-      <p class="banco-brecha"></p>
-      <svg class="banco-chart" role="img"></svg>
-      <p class="banco-hover"></p>`;
-    card.querySelector("header strong").textContent = banco.etiqueta;
-    card.querySelector(".banco-desde").textContent = actual ? `desde ${fmtHora.format(new Date(actual.t))}` : "sin datos";
-    card.querySelector(".venta b").textContent = precio(actual?.venta);
-    card.querySelector(".compra b").textContent = banco.tieneCompra ? precio(actual?.compra) : "No publica";
-    if (!banco.tieneCompra) card.querySelector(".compra b").classList.add("sin-dato");
+  function mostrarTip(ev) {
+    const g = estado.geo;
+    const svg = $b("#banco-chart");
+    if (!g) return;
+    const caja = svg.getBoundingClientRect();
+    const px = ((ev.clientX - caja.left) / caja.width) * g.ancho;
+    const t = acotar(g.t0 + ((px - g.pad.l) / (g.ancho - g.pad.l - g.pad.r)) * (g.t1 - g.t0), g.t0, g.t1);
+    const cursor = document.getElementById("banco-cursor");
+    cursor.setAttribute("x1", g.x(t).toFixed(1));
+    cursor.setAttribute("x2", g.x(t).toFixed(1));
+    cursor.setAttribute("visibility", "visible");
 
-    const nota = card.querySelector(".banco-brecha");
-    if (brecha != null) {
-      const clase = brecha > 0 ? "up" : brecha < 0 ? "down" : "";
-      nota.innerHTML = `Brecha venta vs TCO <b class="${clase}"></b>`;
-      nota.querySelector("b").textContent = `${fmtDif.format(brecha)} Bs. (${fmtDif.format(pct)}%)`;
-      if (spread != null) nota.append(` · Spread ${fmtPrecio.format(spread)} Bs.`);
-    } else {
-      nota.textContent = spread != null ? `Spread ${fmtPrecio.format(spread)} Bs.` : "Sin tipo de cambio oficial para comparar";
+    const filas = [];
+    [g.idA, g.idB].forEach((id) => {
+      const serie = SERIES.find((z) => z.id === id);
+      const v = valorEn(g.s[id], t);
+      if (v == null) return;
+      filas.push(`<div class="tip-row"><span><i class="dot sw-${serie.clase}"></i>${serie.etiqueta}</span><b>Bs ${precio(v)}</b></div>`);
+    });
+    const va = valorEn(g.s[g.idA], t);
+    const vb = valorEn(g.s[g.idB], t);
+    if (va != null && vb != null && vb !== 0) {
+      const dif = va - vb;
+      filas.push(`<div class="tip-row"><span>${estado.lado === "spread" ? "Spread" : "Brecha"}</span><b>Bs ${fmtEje.format(dif)} · ${fmtPct.format((dif / vb) * 100)} %</b></div>`);
     }
-    const hover = card.querySelector(".banco-hover");
-    hover.dataset.base = "Toca o pasa el cursor sobre el gráfico para ver cada hora";
-    card.querySelector("svg").setAttribute("aria-label", `Compra y venta de ${banco.etiqueta} frente al tipo de cambio oficial`);
-    return card;
+    const tip = $b("#banco-tooltip");
+    tip.innerHTML = `<h4>${fmtLargo.format(new Date(t))}</h4>${filas.join("")}`;
+    tip.hidden = false;
+    const anchoWrap = $b("#banco-wrap").clientWidth;
+    tip.style.left = `${acotar(g.x(t) + 14, 4, Math.max(4, anchoWrap - tip.offsetWidth - 4))}px`;
+    tip.style.top = `${acotar(ev.clientY - caja.top - 20, 4, caja.height - tip.offsetHeight - 4)}px`;
+  }
+
+  function selector() {
+    const host = $b("#bancos-selector");
+    host.replaceChildren();
+    estado.bancos.forEach((banco) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.banco = banco.nombre;
+      b.textContent = banco.corto;
+      b.title = banco.largo;
+      const activo = banco.nombre === bancoActual()?.nombre;
+      b.classList.toggle("active", activo);
+      b.setAttribute("aria-pressed", String(activo));
+      host.appendChild(b);
+    });
   }
 
   function celda(actual, previo, esTco = false) {
@@ -307,33 +465,35 @@
 
   function tabla() {
     const tbl = $b("#bancos-tabla");
-    const diasIso = [];
-    for (let i = DIAS_TABLA - 1; i >= 0; i -= 1) diasIso.push(isoDe(estado.fin - i * DIA));
+    const dias = [];
+    for (let i = DIAS_TABLA - 1; i >= 0; i -= 1) dias.push(isoDe(estado.fin - i * DIA));
 
     const thead = document.createElement("thead");
-    const filaCab = document.createElement("tr");
-    filaCab.innerHTML = "<th>Entidad</th>";
-    diasIso.forEach((iso) => {
+    const cab = document.createElement("tr");
+    cab.innerHTML = "<th>Entidad</th>";
+    dias.forEach((iso) => {
       const th = document.createElement("th");
-      th.textContent = fmtDiaTabla.format(new Date(inicioDia(iso) + 12 * 3_600_000));
-      filaCab.appendChild(th);
+      th.textContent = fmtDiaTabla.format(new Date(inicioDia(iso) + 12 * HORA));
+      cab.appendChild(th);
     });
-    thead.appendChild(filaCab);
+    thead.appendChild(cab);
 
     const tbody = document.createElement("tbody");
     const filaTco = document.createElement("tr");
     filaTco.className = "fila-tco";
-    filaTco.innerHTML = "<th scope=\"row\">Oficial BCB (TCO)</th>";
-    diasIso.forEach((iso) => filaTco.appendChild(celda(estado.tco.get(iso) || null, null, true)));
+    filaTco.innerHTML = '<th scope="row">Oficial BCB (TCO)</th>';
+    dias.forEach((iso) => filaTco.appendChild(celda(estado.tco.get(iso) || null, null, true)));
     tbody.appendChild(filaTco);
 
     estado.bancos.forEach((banco) => {
       const tr = document.createElement("tr");
+      tr.dataset.banco = banco.nombre;
+      tr.classList.toggle("activa", banco.nombre === bancoActual()?.nombre);
       const th = document.createElement("th");
       th.scope = "row";
-      th.textContent = banco.etiqueta;
+      th.textContent = banco.largo;
       tr.appendChild(th);
-      diasIso.forEach((iso) => {
+      dias.forEach((iso) => {
         const finDia = Math.min(inicioDia(iso) + DIA - 1, estado.fin);
         const previo = vigente(banco, inicioDia(iso) - 1);
         const actual = finDia >= inicioDia(iso) ? vigente(banco, finDia) : null;
@@ -346,21 +506,40 @@
     requestAnimationFrame(() => { contenedor.scrollLeft = contenedor.scrollWidth; });
   }
 
+  function marcarActivo() {
+    const nombre = bancoActual()?.nombre;
+    document.querySelectorAll("#bancos-selector button").forEach((b) => {
+      const activo = b.dataset.banco === nombre;
+      b.classList.toggle("active", activo);
+      b.setAttribute("aria-pressed", String(activo));
+    });
+    document.querySelectorAll("#bancos-tabla tbody tr[data-banco]").forEach((tr) => {
+      tr.classList.toggle("activa", tr.dataset.banco === nombre);
+    });
+  }
+
+  function vistaBanco() {
+    const banco = bancoActual();
+    if (!banco) return;
+    texto("#banco-nombre", `${banco.largo} · USD / Bs.`);
+    metricas(banco);
+    leyenda();
+    dibujar();
+    marcarActivo();
+  }
+
   function pintar() {
-    const grid = $b("#bancos-grid");
-    const estadoNodo = $b("#bancos-estado");
+    const error = $b("#bancos-error");
     if (!estado.bancos.length || estado.fin == null) {
-      grid.replaceChildren();
-      estadoNodo.hidden = false;
-      estadoNodo.textContent = "Las cotizaciones de las entidades financieras aún no están disponibles.";
+      error.hidden = false;
       return;
     }
-    estadoNodo.hidden = true;
-    $b("#bancos-consulta").textContent = `Última consulta: ${fmtHora.format(new Date(estado.fin))}`;
-    const cards = estado.bancos.map(tarjeta);
-    grid.replaceChildren(...cards);
-    cards.forEach((card, i) => dibujar(card, estado.bancos[i]));
+    error.hidden = true;
+    if (!estado.bancos.some((b) => b.nombre === estado.banco)) estado.banco = estado.bancos[0].nombre;
+    texto("#bancos-consulta", `Cotizaciones publicadas en el sitio web de cada entidad · última consulta ${fmtHora.format(new Date(estado.fin))}`);
+    selector();
     tabla();
+    vistaBanco();
   }
 
   async function cargar() {
@@ -379,26 +558,65 @@
       estado.tco = rt && rt.ok ? leerTco(await rt.text()) : new Map();
       pintar();
     } catch (error) {
-      const nodoEstado = $b("#bancos-estado");
-      nodoEstado.hidden = false;
-      nodoEstado.textContent = "No fue posible obtener las cotizaciones de las entidades financieras.";
+      $b("#bancos-error").hidden = false;
     } finally {
       estado.cargando = false;
     }
   }
 
+  function sincronizarRango() {
+    document.querySelectorAll("#bancos-rango button").forEach((b) => {
+      const activo = Number(b.dataset.dias) === estado.dias;
+      b.classList.toggle("active", activo);
+      b.setAttribute("aria-pressed", String(activo));
+    });
+  }
+
   function iniciar() {
     if (!$b("#bancos")) return;
-    document.querySelectorAll("#bancos-rango button").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        estado.dias = Number(btn.dataset.dias);
-        document.querySelectorAll("#bancos-rango button").forEach((b) => {
-          b.classList.toggle("active", b === btn);
-          b.setAttribute("aria-pressed", String(b === btn));
-        });
-        document.querySelectorAll("#bancos-grid .banco-card").forEach((card, i) => dibujar(card, estado.bancos[i]));
-      });
+    restaurar();
+    sincronizarRango();
+
+    $b("#bancos-selector").addEventListener("click", (ev) => {
+      const b = ev.target.closest("button[data-banco]");
+      if (!b) return;
+      estado.banco = b.dataset.banco;
+      guardar();
+      vistaBanco();
     });
+
+    $b("#bancos-tabla").addEventListener("click", (ev) => {
+      const tr = ev.target.closest("tr[data-banco]");
+      if (!tr) return;
+      estado.banco = tr.dataset.banco;
+      guardar();
+      vistaBanco();
+      $b("#bancos").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
+    $b("#bancos-rango").addEventListener("click", (ev) => {
+      const b = ev.target.closest("button[data-dias]");
+      if (!b) return;
+      estado.dias = Number(b.dataset.dias);
+      guardar();
+      sincronizarRango();
+      vistaBanco();
+    });
+
+    $b("#bancos-leyenda").addEventListener("click", (ev) => {
+      const b = ev.target.closest("button[data-serie]");
+      if (!b) return;
+      const serie = SERIES.find((z) => z.id === b.dataset.serie);
+      estado.lado = b.dataset.serie === "spread" ? (estado.lado === "spread" ? "venta" : "spread") : serie.lado;
+      guardar();
+      leyenda();
+      dibujar();
+    });
+
+    const svg = $b("#banco-chart");
+    svg.addEventListener("pointermove", mostrarTip);
+    svg.addEventListener("pointerdown", mostrarTip);
+    svg.addEventListener("pointerleave", ocultarTip);
 
     const cta = $b("#cta-bancos");
     if (cta) {
@@ -416,9 +634,7 @@
     let espera = null;
     window.addEventListener("resize", () => {
       clearTimeout(espera);
-      espera = setTimeout(() => {
-        document.querySelectorAll("#bancos-grid .banco-card").forEach((card, i) => dibujar(card, estado.bancos[i]));
-      }, 160);
+      espera = setTimeout(dibujar, 160);
     });
 
     $b("#refresh-btn")?.addEventListener("click", cargar);

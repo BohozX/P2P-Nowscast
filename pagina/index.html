@@ -21,7 +21,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap">
-    <link rel="stylesheet" href="assets/styles.css?v=20260929-bancos1">
+    <link rel="stylesheet" href="assets/styles.css?v=20260929-bancos3">
   </head>
   <body>
     <div class="backdrop" aria-hidden="true">
@@ -206,31 +206,91 @@
         <section class="bancos" id="bancos" aria-labelledby="bancos-title">
           <div class="dashboard-head">
             <div>
-              <p class="section-kicker">Sistema financiero · USD</p>
-              <h2 id="bancos-title">Tipo de cambio en bancos</h2>
-            </div>
-            <div class="segmented" id="bancos-rango" role="group" aria-label="Periodo de los gráficos de bancos">
-              <button class="active" type="button" data-dias="7" aria-pressed="true">7D</button>
-              <button type="button" data-dias="30" aria-pressed="false">30D</button>
+              <p class="section-kicker">Tipo de cambio en bancos</p>
+              <h2 id="bancos-title"><span id="banco-nombre">Entidades financieras · USD / Bs.</span></h2>
+              <p class="bancos-consulta" id="bancos-consulta"></p>
             </div>
           </div>
 
-          <p class="bancos-copy">
-            Compra y venta del dólar que publica cada entidad financiera en su sitio web, consultadas
-            cada hora, frente al tipo de cambio oficial del Banco Central de Bolivia.
-            <span id="bancos-consulta"></span>
-          </p>
+          <div class="bancos-selector" id="bancos-selector" role="group" aria-label="Seleccionar entidad financiera"></div>
 
-          <div class="bancos-leyenda" aria-hidden="true">
-            <span><i class="venta"></i>Venta</span>
-            <span><i class="compra"></i>Compra</span>
-            <span><i class="tco-venta"></i>TCO venta</span>
-            <span><i class="tco-compra"></i>TCO compra</span>
-            <span><i class="brecha"></i>Brecha de venta frente al TCO</span>
+          <p class="bancos-error" id="bancos-error" hidden>No fue posible obtener las cotizaciones de las entidades financieras.</p>
+
+          <div class="metrics" aria-live="polite">
+            <article class="metric-card accent-venta">
+              <span class="metric-title">Banco Venta · Bs.</span>
+              <strong id="banco-venta">—</strong>
+              <span class="delta" id="banco-delta-venta">—</span>
+            </article>
+
+            <article class="metric-card accent-compra">
+              <span class="metric-title">Banco Compra · Bs.</span>
+              <strong id="banco-compra">—</strong>
+              <span class="delta" id="banco-delta-compra">—</span>
+            </article>
+
+            <article class="metric-card accent-tco">
+              <span class="metric-title">TCO Venta · Bs.<em class="stamp" id="banco-tco-venta-stamp"></em></span>
+              <strong id="banco-tco-venta">—</strong>
+              <span class="metric-note">Banco Central de Bolivia</span>
+            </article>
+
+            <article class="metric-card accent-tco">
+              <span class="metric-title">TCO Compra · Bs.<em class="stamp" id="banco-tco-compra-stamp"></em></span>
+              <strong id="banco-tco-compra">—</strong>
+              <span class="metric-note">Banco Central de Bolivia</span>
+            </article>
           </div>
 
-          <p class="bancos-estado" id="bancos-estado" hidden></p>
-          <div class="bancos-grid" id="bancos-grid"></div>
+          <div class="metrics metrics-secondary" aria-live="polite">
+            <article class="metric-card accent-brecha">
+              <span class="metric-title">Brecha Venta · Bs.</span>
+              <strong id="banco-brecha-venta">—</strong>
+              <span class="metric-note" id="banco-brecha-venta-pct">—</span>
+            </article>
+
+            <article class="metric-card accent-brecha">
+              <span class="metric-title">Brecha Compra · Bs.</span>
+              <strong id="banco-brecha-compra">—</strong>
+              <span class="metric-note" id="banco-brecha-compra-pct">—</span>
+            </article>
+
+            <article class="metric-card">
+              <span class="metric-title">Spread del banco · Bs.</span>
+              <strong id="banco-spread">—</strong>
+              <span class="metric-note" id="banco-spread-pct">—</span>
+            </article>
+
+            <article class="metric-card">
+              <span class="metric-title">Cambios de cotización</span>
+              <strong id="banco-cambios">—</strong>
+              <span class="metric-note" id="banco-cambios-nota">—</span>
+            </article>
+          </div>
+
+          <article class="chart-card">
+            <div class="chart-toolbar">
+              <div class="control-group">
+                <span class="control-label">Periodo</span>
+                <div class="segmented" id="bancos-rango" role="group" aria-label="Periodo del gráfico de bancos">
+                  <button type="button" data-dias="1">24H</button>
+                  <button class="active" type="button" data-dias="7">7D</button>
+                  <button type="button" data-dias="30">30D</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="legend" id="bancos-leyenda" aria-label="Series del gráfico de bancos"></div>
+
+            <div class="chart-wrap no-volume" id="banco-wrap">
+              <svg id="banco-chart" role="img" aria-label="Compra y venta de la entidad frente al tipo de cambio oficial"></svg>
+              <div class="chart-tooltip" id="banco-tooltip" hidden></div>
+              <div class="chart-state" id="bancos-vacio" hidden>
+                <strong>Sin cotizaciones para este periodo</strong>
+                <span>Prueba con otro periodo o con otra entidad.</span>
+              </div>
+            </div>
+          </article>
 
           <article class="chart-card bancos-resumen">
             <div class="bancos-resumen-head">
@@ -280,6 +340,6 @@
     <div class="tip-bubble" id="tip-bubble" hidden></div>
 
     <script src="assets/app.js?v=20260825-ui13" defer></script>
-    <script src="assets/bancos.js?v=20260929-bancos1" defer></script>
+    <script src="assets/bancos.js?v=20260929-bancos3" defer></script>
   </body>
 </html>

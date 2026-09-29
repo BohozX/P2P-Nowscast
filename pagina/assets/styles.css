@@ -753,98 +753,67 @@ h1 {
   100% { box-shadow: 0 0 0 0 transparent; }
 }
 
-.bancos-copy { margin: -2px 0 12px; max-width: 80ch; font-size: 13px; color: var(--ink-2); }
-.bancos-copy span { color: var(--ink-3); white-space: nowrap; }
+.bancos-consulta { margin-top: 5px; font-size: 12px; color: var(--ink-3); }
 
-.bancos-leyenda { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 12px; font-size: 11.5px; color: var(--ink-2); }
-.bancos-leyenda span { display: inline-flex; align-items: center; gap: 7px; }
-.bancos-leyenda i { width: 16px; height: 0; border-top: 2.4px solid; }
-.bancos-leyenda i.venta { border-color: var(--green); }
-.bancos-leyenda i.compra { border-color: var(--cyan); }
-.bancos-leyenda i.tco-venta { border-top: 2px dashed var(--tco); }
-.bancos-leyenda i.tco-compra { border-top: 2px dotted var(--tco-2); }
-.bancos-leyenda i.brecha { width: 14px; height: 10px; border: 0; border-radius: 2px; background: var(--green-soft); }
+.bancos-selector { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 14px; }
 
-.bancos-estado {
-  padding: 22px;
+.bancos-selector button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: rgba(4, 16, 13, .55);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  white-space: nowrap;
+  transition: background .18s, border-color .18s, color .18s;
+}
+
+.bancos-selector button:hover { border-color: var(--accent-edge); color: var(--ink); }
+
+.bancos-selector button.active {
+  border-color: var(--accent-edge);
+  background: var(--green-soft);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .03);
+}
+
+.bancos-error {
+  margin-bottom: 14px;
+  padding: 18px;
   border: 1px dashed var(--line);
   border-radius: var(--r-md);
   text-align: center;
   font-size: 13px;
-  color: var(--ink-3);
+  color: var(--down);
 }
 
-.bancos-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.metric-card > strong.sin-dato { font-size: 17px; color: var(--ink-3); }
 
-.banco-card {
-  position: relative;
-  padding: 13px 14px 10px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--r-md);
-  background: linear-gradient(165deg, var(--panel-2), var(--panel));
-  overflow: hidden;
-  transition: border-color .18s;
-}
+#banco-chart { width: 100%; height: 100%; display: block; overflow: visible; touch-action: pan-y; -webkit-user-select: none; user-select: none; }
+#banco-chart .grid { stroke: var(--grid-line); stroke-width: 1; }
+#banco-chart .eje { fill: #6d857c; font-size: 11px; font-family: "JetBrains Mono", monospace; }
+#banco-chart .eje-x { fill: #6d857c; font-size: 11px; }
+#banco-chart path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+#banco-chart .l-venta { stroke: var(--green); stroke-width: 2.4; }
+#banco-chart .l-compra { stroke: var(--cyan); stroke-width: 2.4; }
+#banco-chart .l-tco-venta { stroke: var(--tco); stroke-width: 1.8; stroke-dasharray: 7 4; }
+#banco-chart .l-tco-compra { stroke: var(--tco-2); stroke-width: 1.8; stroke-dasharray: 2 4; }
+#banco-chart .s-venta { fill: var(--green); fill-opacity: .14; }
+#banco-chart .s-compra { fill: var(--cyan); fill-opacity: .14; }
+#banco-chart .s-baja { fill: #ff6b6b; fill-opacity: .3; }
+#banco-chart .p-venta { fill: var(--green); }
+#banco-chart .p-compra { fill: var(--cyan); }
+#banco-chart .fin { stroke: var(--bg-2); stroke-width: 1.4; }
+#banco-chart .cursor { stroke: rgba(238, 246, 242, .28); stroke-width: 1; stroke-dasharray: 3 3; }
 
-.banco-card:hover { border-color: var(--accent-edge); }
-
-.banco-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 34px;
-  height: 2px;
-  background: linear-gradient(90deg, var(--green), var(--cyan));
-}
-
-.banco-card header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.banco-card header strong { font-size: 14px; font-weight: 700; }
-.banco-desde { font-size: 10.5px; color: var(--ink-3); white-space: nowrap; }
-
-.banco-precios { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 9px; }
-.banco-precios small {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-.banco-precios small i { width: 7px; height: 7px; border-radius: 2px; }
-.banco-precios .venta small i { background: var(--green); }
-.banco-precios .compra small i { background: var(--cyan); }
-.banco-precios b { display: block; margin-top: 2px; font-size: 21px; font-weight: 800; letter-spacing: -.3px; }
-.banco-precios b.sin-dato { padding-top: 6px; font-size: 13px; font-weight: 600; color: var(--ink-3); }
-
-.banco-brecha { margin-top: 6px; font-size: 11.5px; color: var(--ink-3); }
-.banco-brecha b { font-weight: 700; color: var(--ink-2); }
-.banco-brecha b.up { color: var(--up); }
-.banco-brecha b.down { color: var(--down); }
-
-.banco-chart { display: block; width: 100%; height: 118px; margin-top: 8px; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
-.banco-chart .grid { stroke: var(--grid-line); stroke-width: 1; }
-.banco-chart .eje { fill: var(--ink-3); font-size: 9.5px; font-family: "JetBrains Mono", monospace; }
-.banco-chart .brecha { fill: var(--green-soft); }
-.banco-chart path { fill: none; stroke-linejoin: round; stroke-linecap: round; }
-.banco-chart .l-venta { stroke: var(--green); stroke-width: 2; }
-.banco-chart .l-compra { stroke: var(--cyan); stroke-width: 2; }
-.banco-chart .l-tco-venta { stroke: var(--tco); stroke-width: 1.3; stroke-dasharray: 6 3; opacity: .85; }
-.banco-chart .l-tco-compra { stroke: var(--tco-2); stroke-width: 1.3; stroke-dasharray: 2 3; }
-.banco-chart .cursor { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 2 3; }
-
-.banco-hover {
-  min-height: 16px;
-  margin-top: 3px;
-  overflow: hidden;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 10.5px;
-  color: var(--ink-3);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
+.legend .swatch.sw-venta, .chart-tooltip .dot.sw-venta { background: var(--green); }
+.legend .swatch.sw-compra, .chart-tooltip .dot.sw-compra { background: var(--cyan); }
+.legend .swatch.dash.sw-tco-venta { color: var(--tco); }
+.legend .swatch.dash.sw-tco-compra { color: var(--tco-2); }
+.chart-tooltip .dot.sw-tco-venta { background: var(--tco); }
+.chart-tooltip .dot.sw-tco-compra { background: var(--tco-2); }
 
 .bancos-resumen h3 { font-size: 15px; font-weight: 800; letter-spacing: -.1px; }
 .bancos-resumen-head p { margin-top: 4px; font-size: 12px; color: var(--ink-3); }
@@ -883,14 +852,15 @@ h1 {
 .bancos-tabla .fila-tco th, .bancos-tabla .fila-tco td { background: var(--panel-2); }
 .bancos-tabla .fila-tco th, .bancos-tabla .fila-tco .v, .bancos-tabla .fila-tco .c { color: var(--tco); }
 
-@media (min-width: 640px) {
-  .bancos-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.bancos-tabla tbody tr[data-banco] { cursor: pointer; }
+.bancos-tabla tbody tr.activa th, .bancos-tabla tbody tr.activa td { background: var(--panel-3); }
+.bancos-tabla tbody tr.activa th { box-shadow: inset 3px 0 0 var(--green); }
+
+@media (max-width: 639px) {
+  .bancos-selector { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+  .bancos-selector::-webkit-scrollbar { display: none; }
 }
 
 @media (min-width: 900px) {
   .cta-bancos { justify-self: end; }
-}
-
-@media (min-width: 1040px) {
-  .bancos-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 }
