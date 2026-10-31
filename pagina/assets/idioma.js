@@ -137,8 +137,6 @@ const diccionario = { en: {
   "{signo} {valor}{pct} vs {fecha}": "{signo} {valor}{pct} vs {fecha}",
   "Spread P2P": "P2P spread",
   "Brecha": "Gap",
-  "Vol. estimado": "Est. volume",
-  "Trans. estimadas": "Est. transactions",
   "Sin datos": "No data",
   "Última captura · {fecha}": "Latest capture · {fecha}",
   "Sin captura": "No capture",

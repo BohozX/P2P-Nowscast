@@ -140,11 +140,9 @@ function sideSeries() {
 const enSpread = () => state.side === "spread";
 
 const timeZone = "America/La_Paz";
-let integerFormat;
 let priceFormat;
 let tcoFormat;
 let percentFormat;
-let compactFormat;
 let fullDateFormat;
 let shortDateFormat;
 let dayFormat;
@@ -152,7 +150,6 @@ let diaLargoFormat;
 
 function prepararFormatos() {
   const regional = configuracionRegional();
-  integerFormat = new Intl.NumberFormat(regional, { maximumFractionDigits: 0 });
   priceFormat = new Intl.NumberFormat(regional, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -163,10 +160,6 @@ function prepararFormatos() {
   });
   percentFormat = new Intl.NumberFormat(regional, {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  compactFormat = new Intl.NumberFormat(regional, {
-    notation: "compact",
     maximumFractionDigits: 2,
   });
   fullDateFormat = new Intl.DateTimeFormat(regional, {
@@ -467,9 +460,13 @@ function renderMetrics(rows) {
     $(`#metric-price-${side.slug}`).textContent = summary.price == null
       ? "—"
       : priceFormat.format(summary.price);
-    $(`#metric-volume-${side.slug}`).textContent = compactFormat.format(summary.volume);
-    $(`#metric-transactions-${side.slug}`).textContent = integerFormat.format(summary.transactions);
     renderDelta($(`#delta-${side.slug}`), summary.change);
+  });
+  ["volume", "transactions"].forEach((campo) => {
+    const total = summaries.venta[campo] + summaries.compra[campo];
+    const parteVenta = total > 0 ? Math.round((summaries.venta[campo] / total) * 10000) / 100 : null;
+    $(`#metric-${campo}-venta`).textContent = parteVenta == null ? "—" : traducir("{n} %", { n: percentFormat.format(parteVenta) });
+    $(`#metric-${campo}-compra`).textContent = parteVenta == null ? "—" : traducir("{n} %", { n: percentFormat.format(100 - parteVenta) });
   });
 
   const venta = summaries.venta.price;
@@ -867,19 +864,6 @@ function showTooltip(event) {
     const nombre = traducir(enSpread() ? "Spread P2P" : "Brecha");
     rows.push(`<div class="tip-row"><span>${nombre}</span><b>Bs ${priceFormat.format(gap)} · ${traducir("{n} %", { n: percentFormat.format((gap / Number(pTco)) * 100) })}</b></div>`);
   }
-  const vol = enSpread()
-    ? (point.volVenta || 0) + (point.volCompra || 0)
-    : (state.side === "venta" ? point.volVenta : point.volCompra);
-  const tx = enSpread()
-    ? (point.txVenta || 0) + (point.txCompra || 0)
-    : (state.side === "venta" ? point.txVenta : point.txCompra);
-  if (state.showVolume && vol) {
-    rows.push(`<div class="tip-row"><span>${traducir("Vol. estimado")}</span><b>${compactFormat.format(vol)} ${state.asset}</b></div>`);
-  }
-  if (tx) {
-    rows.push(`<div class="tip-row"><span>${traducir("Trans. estimadas")}</span><b>${integerFormat.format(tx)}</b></div>`);
-  }
-
   const tooltip = $("#chart-tooltip");
   const cuando = esDiaria()
     ? diaLargoFormat.format(instante(point.time))
