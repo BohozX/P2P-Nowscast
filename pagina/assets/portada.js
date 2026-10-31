@@ -9,7 +9,7 @@
   const DIBUJO = 2.4, VUELTA = 18, ENLACE = 120;
 
   let ancho = 0, alto = 0, arriba = 0, abajo = 0, dpr = 1;
-  let nodos = [], operaciones = [], anillos = [];
+  let nodos = [];
   let serie = null, geo = null, inicio = 0, pendiente = 0;
   let fondo = null, capa = null, cinta = null, cintaAncho = 0;
   const raton = { x: -9999, y: -9999, fuerza: 0, dentro: false };
@@ -65,9 +65,8 @@
       x: Math.random() * ancho,
       y: arriba + 10 + Math.random() * (abajo - arriba - 20),
       vx: (Math.random() - .5) * .22, vy: (Math.random() - .5) * .16,
-      r: 1.1 + Math.random() * 1.2, luz: 0,
+      r: 1.1 + Math.random() * 1.2,
     }));
-    operaciones = []; anillos = [];
   }
 
   function trazo(k, clave) {
@@ -137,20 +136,17 @@
       if (p.x > ancho) { p.x = ancho; p.vx *= -1; }
       if (p.y < arriba) { p.y = arriba; p.vy *= -1; }
       if (p.y > abajo) { p.y = abajo; p.vy *= -1; }
-      if (p.luz > 0) p.luz = Math.max(0, p.luz - .02 * dt);
     });
   }
 
   function dibujarSerie(t) {
-    if (!capa) return null;
+    if (!capa) return;
     const avance = quieto ? 1 : Math.min(1, (t - inicio) / DIBUJO);
     const w = Math.max(1, ancho * avance);
     c.drawImage(capa, 0, 0, w * dpr, alto * dpr, 0, 0, w, alto);
-    if (avance < 1 || quieto) return null;
+    if (avance < 1 || quieto) return;
     const n = serie.puntos.length;
     const fase = ((((t - inicio - DIBUJO) % VUELTA) + VUELTA) % VUELTA) / VUELTA;
-    const pos = fase * (n - 1);
-    const i = Math.min(n - 1, Math.round(pos));
     const x = geo.x(0) + (geo.x(n - 1) - geo.x(0)) * fase;
     const luz = c.createLinearGradient(x - 70, 0, x, 0);
     luz.addColorStop(0, `rgba(${VERDE},0)`);
@@ -160,40 +156,6 @@
     c.strokeStyle = `rgba(${VERDE},.35)`;
     c.lineWidth = 1;
     c.beginPath(); c.moveTo(x, arriba); c.lineTo(x, abajo); c.stroke();
-    const a = Math.floor(pos), b = Math.min(n - 1, a + 1), s = pos - a;
-    [["compra", CELESTE], ["venta", VERDE]].forEach(([clave, color]) => {
-      const va = serie.puntos[a][clave], vb = serie.puntos[b][clave];
-      if (va == null || vb == null) return;
-      const y = geo.y(va + (vb - va) * s);
-      c.fillStyle = `rgba(${color},.95)`;
-      c.beginPath(); c.arc(x, y, 3.2, 0, 6.283); c.fill();
-      c.strokeStyle = `rgba(${color},.35)`;
-      c.beginPath(); c.arc(x, y, 8, 0, 6.283); c.stroke();
-    });
-    return serie.puntos[i];
-  }
-
-  function nuevaOperacion(punto) {
-    if (operaciones.length > 60) return;
-    const a = nodos[Math.floor(Math.random() * nodos.length)];
-    let b = null;
-    for (let k = 0; k < 8 && !b; k += 1) {
-      const q = nodos[Math.floor(Math.random() * nodos.length)];
-      const d = Math.hypot(q.x - a.x, q.y - a.y);
-      if (q !== a && d > 50 && d < 280) b = q;
-    }
-    if (!b) return;
-    const pv = punto ? punto.volVenta : 1, pc = punto ? punto.volCompra : 1;
-    const venta = Math.random() < pv / ((pv + pc) || 1);
-    operaciones.push({ a, b, t: 0, dur: 55 + Math.random() * 45, curva: (Math.random() - .5) * .5, color: venta ? VERDE : CELESTE, rastro: [] });
-    a.luz = 1;
-  }
-
-  function enCurva(o, s) {
-    const mx = (o.a.x + o.b.x) / 2, my = (o.a.y + o.b.y) / 2;
-    const cx = mx - (o.b.y - o.a.y) * o.curva, cy = my + (o.b.x - o.a.x) * o.curva;
-    const u = 1 - s;
-    return [u * u * o.a.x + 2 * u * s * cx + s * s * o.b.x, u * u * o.a.y + 2 * u * s * cy + s * s * o.b.y];
   }
 
   function enlaces() {
@@ -229,7 +191,6 @@
     }
   }
 
-  let acumulado = 0;
   function cuadro(t, dt) {
     if (fondo) c.drawImage(fondo, 0, 0, ancho, alto); else c.clearRect(0, 0, ancho, alto);
     if (cinta) {
@@ -242,50 +203,12 @@
 
     if (!quieto) mover(dt);
     enlaces();
-    const punto = dibujarSerie(t);
+    dibujarSerie(t);
 
     c.fillStyle = "rgba(200,245,222,.42)";
     c.beginPath();
-    nodos.forEach((p) => { if (p.luz < .05) { c.moveTo(p.x + p.r, p.y); c.arc(p.x, p.y, p.r, 0, 6.283); } });
+    nodos.forEach((p) => { c.moveTo(p.x + p.r, p.y); c.arc(p.x, p.y, p.r, 0, 6.283); });
     c.fill();
-    nodos.forEach((p) => {
-      if (p.luz < .05) return;
-      c.fillStyle = `rgba(220,255,236,${.42 + .55 * p.luz})`;
-      c.beginPath(); c.arc(p.x, p.y, p.r + p.luz * 1.6, 0, 6.283); c.fill();
-    });
-
-    if (!quieto && serie) {
-      const vol = punto ? (punto.volVenta + punto.volCompra) / serie.volMax : .4;
-      acumulado += dt / 60 * (2.5 + 14 * Math.min(1, vol));
-      while (acumulado >= 1) { nuevaOperacion(punto); acumulado -= 1; }
-    }
-
-    c.lineWidth = 1.6;
-    operaciones = operaciones.filter((o) => {
-      o.t += dt;
-      const s = Math.min(1, o.t / o.dur);
-      const [x, y] = enCurva(o, s);
-      o.rastro.push(x, y);
-      if (o.rastro.length > 20) o.rastro.splice(0, 2);
-      c.strokeStyle = `rgba(${o.color},.55)`;
-      c.beginPath();
-      c.moveTo(o.rastro[0], o.rastro[1]);
-      for (let k = 2; k < o.rastro.length; k += 2) c.lineTo(o.rastro[k], o.rastro[k + 1]);
-      c.stroke();
-      c.fillStyle = `rgba(${o.color},.95)`;
-      c.beginPath(); c.arc(x, y, 2.1, 0, 6.283); c.fill();
-      if (s >= 1) { anillos.push({ x: o.b.x, y: o.b.y, t: 0, color: o.color }); o.b.luz = 1; return false; }
-      return true;
-    });
-
-    c.lineWidth = 1.4;
-    anillos = anillos.filter((a) => {
-      a.t += dt;
-      const s = a.t / 40;
-      c.strokeStyle = `rgba(${a.color},${.7 * (1 - s)})`;
-      c.beginPath(); c.arc(a.x, a.y, 3 + s * 22, 0, 6.283); c.stroke();
-      return s < 1;
-    });
 
     if (raton.fuerza > .01) {
       const halo = c.createRadialGradient(raton.x, raton.y, 0, raton.x, raton.y, 180);
@@ -391,11 +314,10 @@
       const o = oficialDe(oficial, p.timestamp_bo.slice(0, 10));
       return {
         venta: p.vwap_bob ?? null, compra: q ? q.vwap_bob ?? null : null, oficial: o ? o.venta : null,
-        volVenta: +p.volume_asset || 0, volCompra: q ? +q.volume_asset || 0 : 0,
       };
     });
     if (puntos.length < 2) return null;
-    return { puntos, volMax: Math.max(1, ...puntos.map((p) => p.volVenta + p.volCompra)) };
+    return { puntos };
   }
 
   addEventListener("idiomachange", () => {
