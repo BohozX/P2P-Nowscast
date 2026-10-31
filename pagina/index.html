@@ -1,346 +1,566 @@
 <!doctype html>
-<html lang="es" data-asset="USDT">
+<html lang="es" data-asset="USDT" data-i18n-lang>
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>P2P Nowcast Bolivia</title>
-    <meta name="description" content="Precio y volumen P2P observado de USDT y USDC en Binance, Bybit y Bitget, expresados en bolivianos.">
-    <meta name="color-scheme" content="dark">
-    <meta name="theme-color" content="#04110e">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title data-i18n="Mercado cambiario · Bolivia">Mercado cambiario · Bolivia</title>
+    <meta name="description" content="Precio y volumen P2P de USDT y USDC en Binance, Bybit y Bitget, expresados en bolivianos, frente al tipo de cambio oficial y las cotizaciones de los bancos." data-i18n-content="Precio y volumen P2P de USDT y USDC en Binance, Bybit y Bitget, expresados en bolivianos, frente al tipo de cambio oficial y las cotizaciones de los bancos.">
+    <meta name="theme-color" content="#000000">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-
-    <link rel="icon" type="image/png" href="assets/logo.png">
-    <link rel="apple-touch-icon" href="assets/logo.png">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23000'/%3E%3Cpath d='M12 4.5 18.5 8.2 12 12 5.5 8.2z' fill='%23fff'/%3E%3Cpath d='M5.5 8.2V15.8L12 19.5V12zM18.5 8.2V15.8L12 19.5V12z' fill='none' stroke='%23fff' stroke-width='1.3' stroke-linejoin='round'/%3E%3C/svg%3E">
     <meta property="og:type" content="website">
     <meta property="og:title" content="P2P Nowcast Bolivia">
     <meta property="og:description" content="Precio y volumen P2P observado de USDT y USDC en Binance, Bybit y Bitget, expresados en bolivianos.">
     <meta property="og:image" content="https://bohozx.github.io/P2P-Nowscast/assets/logo.png">
-
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap">
-    <link rel="stylesheet" href="assets/styles.css?v=20260929-bancos3">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/styles.css?v=2">
   </head>
   <body>
-    <div class="backdrop" aria-hidden="true">
-      <div class="backdrop-grid"></div>
-      <div class="backdrop-glow"></div>
-      <div class="backdrop-andes"></div>
-    </div>
+    <header class="nav">
+      <div class="env nav-in">
+        <a class="marca" href="https://bohozx.github.io/" aria-label="Inicio" data-i18n-aria="Inicio">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8 20 7.4 12 12 4 7.4z" fill="currentColor"/><path d="M4 7.4v9.2l8 4.6V12zM20 7.4v9.2l-8 4.6V12z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+          <span>Daniel Oros</span>
+        </a>
+        <nav class="nav-links" aria-label="Secciones" data-i18n-aria="Secciones">
+          <a href="#p2p" data-i18n="Mercado P2P">Mercado P2P</a>
+          <a href="#observado" data-i18n="Observado">Observado</a>
+          <a href="#bancos" data-i18n="Bancos">Bancos</a>
+          <a href="#operaciones" data-i18n="Operaciones">Operaciones</a>
+          <a href="#reservas" data-i18n="Reservas">Reservas</a>
+          <a href="#noticias" data-i18n="Noticias">Noticias</a>
+        </nav>
+        <div class="idioma" id="idioma" role="group" aria-label="Idioma" data-i18n-aria="Idioma"><button type="button" data-l="en" aria-pressed="false">EN</button><button type="button" data-l="es" aria-pressed="true">ES</button></div>
+        <a class="btn" href="#p2p"><span class="largo">P2P Nowcast Bolivia</span><span class="corto">P2P</span></a>
+      </div>
+    </header>
 
-    <div class="shell">
-      <header class="topbar">
-        <div class="brand">
-          <img src="assets/logo.png" alt="" width="34" height="34" decoding="async">
-          <span>
-            <b>P2P Nowcast</b>
-            <small>Bolivia · Bs.</small>
-          </span>
-        </div>
-
-        <div class="topbar-tools">
-          <div class="status-wrap">
-            <button class="status-pill" id="data-status" type="button" aria-expanded="false"
-                    aria-controls="status-panel" aria-label="Estado de los datos">
-              <i></i>
-              <span id="data-status-text">Cargando</span>
-            </button>
-            <div class="status-panel" id="status-panel" hidden>
-              <p class="status-panel-title">Estado de los datos</p>
-              <dl>
-                <div><dt>Última captura</dt><dd id="status-capture">—</dd></div>
-                <div><dt>Antigüedad</dt><dd id="status-rel">—</dd></div>
-                <div><dt>Resolución</dt><dd id="status-freq">—</dd></div>
-                <div><dt>Tipo de cambio oficial</dt><dd id="status-tco">—</dd></div>
-              </dl>
-              <p class="status-panel-foot" id="status-note">Fuentes: Binance P2P · Bybit P2P · Bitget P2P · Banco Central de Bolivia</p>
-            </div>
-          </div>
-          <button class="icon-btn" id="refresh-btn" type="button" title="Actualizar datos" aria-label="Actualizar datos">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M20 12a8 8 0 1 1-2.34-5.66"></path>
-              <path d="M20 4v5h-5"></path>
-            </svg>
-          </button>
-        </div>
-      </header>
-
-      <main>
-        <section class="hero">
-          <div class="hero-copy-wrap">
-            <p class="eyebrow">Mercado P2P · Tipo de cambio oficial</p>
-            <h1>P2P Nowcast Bolivia</h1>
-            <p class="hero-copy">
-              Página diseñada para monitorear el precio y el volumen P2P observado
-              de USDT y USDC en Binance, Bybit y Bitget, expresados en bolivianos.
-            </p>
-          </div>
-          <a class="cta-bancos" id="cta-bancos" href="#bancos">
-            <span class="cta-brillo" aria-hidden="true"></span>
-            <span class="cta-punto" aria-hidden="true"></span>
-            <span>Tipo de cambio en bancos</span>
-            <em>Nuevo</em>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M6 13l6 6 6-6"></path></svg>
-          </a>
+    <section class="portada" id="portada">
+      <canvas class="portada-red" id="portada-red" aria-hidden="true"></canvas>
+      <div class="portada-velo" aria-hidden="true"></div>
+      <div class="env portada-txt">
+        <h1 class="grad" data-i18n="Mercado cambiario">Mercado cambiario</h1>
+        <p data-i18n="El dólar en Bolivia más allá del tipo de cambio oficial: el precio y el volumen P2P de USDT y USDC en Binance, Bybit y Bitget, observados &lt;b&gt;cada 5 minutos&lt;/b&gt;, frente al oficial del Banco Central y las cotizaciones de los bancos.">El dólar en Bolivia más allá del tipo de cambio oficial: el precio y el volumen P2P de USDT y USDC
+          en Binance, Bybit y Bitget, observados <b>cada 5 minutos</b>, frente al oficial del Banco Central
+          y las cotizaciones de los bancos.</p>
+        <section class="cifras" id="cifras" aria-live="polite">
+          <article class="cifra destacada">
+            <span data-i18n="P2P Venta · USDT">P2P Venta · USDT</span>
+            <strong id="c-venta">—</strong>
+            <em id="c-venta-nota"></em>
+          </article>
+          <article class="cifra">
+            <span data-i18n="P2P Compra · USDT">P2P Compra · USDT</span>
+            <strong id="c-compra">—</strong>
+            <em id="c-compra-nota"></em>
+          </article>
+          <article class="cifra">
+            <span data-i18n="Oficial · Venta">Oficial · Venta</span>
+            <strong id="c-oficial">—</strong>
+            <em id="c-oficial-nota"></em>
+          </article>
+          <article class="cifra">
+            <span data-i18n="Brecha · Venta">Brecha · Venta</span>
+            <strong id="c-brecha">—</strong>
+            <em data-i18n="P2P frente al oficial">P2P frente al oficial</em>
+          </article>
         </section>
+      </div>
+    </section>
 
-        <section class="dashboard" aria-labelledby="dashboard-title">
-          <div class="dashboard-head">
-            <div>
-              <p class="section-kicker">Mercado observado</p>
-              <h2 id="dashboard-title"><span id="market-label">USDT / Bs.</span></h2>
-            </div>
+    <main>
+      <section class="sec" id="p2p">
+        <div class="env">
+          <div class="sec-cab">
+            <p class="kicker">Binance · Bybit · Bitget</p>
+            <h2 class="grad">P2P Nowcast Bolivia</h2>
+          </div>
 
-            <div class="asset-selector" id="asset-selector" role="group" aria-label="Seleccionar activo">
+          <div class="selector-centro">
+            <div class="chips" id="asset-selector" role="group" aria-label="Seleccionar activo" data-i18n-aria="Seleccionar activo">
               <button class="active" type="button" data-asset="USDT" aria-pressed="true">USDT</button>
               <button type="button" data-asset="USDC" aria-pressed="false">USDC</button>
             </div>
           </div>
+          <p class="captura" id="data-status">
+            <i></i><span id="data-status-text">Cargando</span><span id="status-rel"></span>
+            <button class="recargar" id="refresh-btn" type="button" title="Actualizar datos" aria-label="Actualizar datos" data-i18n-title="Actualizar datos" data-i18n-aria="Actualizar datos">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"></path><path d="M20 4v5h-5"></path></svg>
+            </button>
+          </p>
 
-          <div class="metrics" id="metrics" aria-live="polite">
-            <article class="metric-card accent-venta">
-              <span class="metric-title">P2P Venta · Bs.</span>
+          <div class="metricas" aria-live="polite">
+            <article class="metrica acento-venta">
+              <span class="metric-title" data-i18n="P2P Venta · Bs.">P2P Venta · Bs.</span>
               <strong id="metric-price-venta">—</strong>
               <span class="delta" id="delta-venta">—</span>
             </article>
-
-            <article class="metric-card accent-compra">
-              <span class="metric-title">P2P Compra · Bs.</span>
+            <article class="metrica acento-compra">
+              <span class="metric-title" data-i18n="P2P Compra · Bs.">P2P Compra · Bs.</span>
               <strong id="metric-price-compra">—</strong>
               <span class="delta" id="delta-compra">—</span>
             </article>
-
-            <article class="metric-card accent-tco">
-              <span class="metric-title">TCO Venta · Bs.<em class="stamp" id="metric-tco-venta-stamp"></em></span>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="TCO Venta · Bs.">TCO Venta · Bs.<em class="stamp" id="metric-tco-venta-stamp"></em></span>
               <strong id="metric-tco-venta">—</strong>
               <span class="metric-note" id="metric-tco-venta-note">Banco Central de Bolivia</span>
             </article>
-
-            <article class="metric-card accent-tco">
-              <span class="metric-title">TCO Compra · Bs.<em class="stamp" id="metric-tco-compra-stamp"></em></span>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="TCO Compra · Bs.">TCO Compra · Bs.<em class="stamp" id="metric-tco-compra-stamp"></em></span>
               <strong id="metric-tco-compra">—</strong>
               <span class="metric-note" id="metric-tco-compra-note">Banco Central de Bolivia</span>
             </article>
           </div>
-
-          <div class="metrics metrics-secondary" aria-live="polite">
-            <article class="metric-card accent-brecha">
+          <div class="metricas segunda" aria-live="polite">
+            <article class="metrica">
               <span class="metric-title" id="metric-gap-title">Brecha Venta · Bs.</span>
               <strong id="metric-gap">—</strong>
               <span class="metric-note" id="metric-gap-pct">P2P frente al tipo de cambio oficial</span>
             </article>
-
-            <article class="metric-card">
-              <span class="metric-title">Spread P2P · Bs.</span>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Spread P2P · Bs.">Spread P2P · Bs.</span>
               <strong id="metric-spread">—</strong>
               <span class="metric-note" id="metric-spread-pct">Sin precios en el rango</span>
             </article>
-
-            <article class="metric-card">
-              <span class="metric-title">
-                Volumen estimado · <span id="volume-unit">USDT</span>
-                <button class="info-dot" type="button" data-tip="Volumen estimado con cambios del monto específico de cada anuncio en Binance y cantidades ejecutadas en Bybit y Bitget." aria-label="Qué significa volumen estimado">?</button>
-              </span>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Volumen estimado ·">Volumen estimado · <span id="volume-unit">USDT</span></span>
               <div class="metric-pair">
-                <div class="metric-side venta"><small><i></i>Venta</small><strong id="metric-volume-venta">—</strong></div>
-                <div class="metric-side compra"><small><i></i>Compra</small><strong id="metric-volume-compra">—</strong></div>
+                <div class="metric-side venta"><small data-i18n="Venta"><i></i>Venta</small><strong id="metric-volume-venta">—</strong></div>
+                <div class="metric-side compra"><small data-i18n="Compra"><i></i>Compra</small><strong id="metric-volume-compra">—</strong></div>
               </div>
             </article>
-
-            <article class="metric-card">
-              <span class="metric-title">
-                Transacciones estimadas
-                <button class="info-dot" type="button" data-tip="Estimación derivada de cambios observados en anuncios P2P comparables." aria-label="Qué significa transacciones estimadas">?</button>
-              </span>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Transacciones estimadas">Transacciones estimadas</span>
               <div class="metric-pair">
-                <div class="metric-side venta"><small><i></i>Venta</small><strong id="metric-transactions-venta">—</strong></div>
-                <div class="metric-side compra"><small><i></i>Compra</small><strong id="metric-transactions-compra">—</strong></div>
+                <div class="metric-side venta"><small data-i18n="Venta"><i></i>Venta</small><strong id="metric-transactions-venta">—</strong></div>
+                <div class="metric-side compra"><small data-i18n="Compra"><i></i>Compra</small><strong id="metric-transactions-compra">—</strong></div>
               </div>
             </article>
           </div>
 
-          <article class="chart-card">
-            <div class="chart-toolbar">
-              <div class="control-group">
-                <span class="control-label">Resolución</span>
-                <div class="segmented" id="frequency-selector" role="group" aria-label="Resolución"></div>
-              </div>
-
-              <div class="control-group">
-                <span class="control-label">Periodo</span>
-                <div class="segmented" id="range-selector" role="group" aria-label="Periodo">
+          <section class="bloque">
+            <div class="grafico-head">
+              <h3 id="market-label">USDT / Bs.</h3>
+              <div class="mandos">
+                <div class="vista" id="frequency-selector" role="group" aria-label="Resolución" data-i18n-aria="Resolución"></div>
+                <div class="vista" id="range-selector" role="group" aria-label="Periodo" data-i18n-aria="Periodo">
                   <button type="button" data-range="1">24H</button>
                   <button type="button" data-range="7">7D</button>
                   <button class="active" type="button" data-range="30">30D</button>
                 </div>
               </div>
-
             </div>
-
-            <div class="legend" id="legend" aria-label="Series del gráfico"></div>
-
+            <div class="legend" id="legend" aria-label="Series del gráfico" data-i18n-aria="Series del gráfico"></div>
             <div class="chart-wrap" id="chart-wrap">
-              <svg id="market-chart" role="img" aria-label="Precio P2P de compra y venta, tipo de cambio oficial y volumen estimado"></svg>
+              <svg id="market-chart" role="img" aria-label="Precio P2P de compra y venta, tipo de cambio oficial y volumen estimado" data-i18n-aria="Precio P2P de compra y venta, tipo de cambio oficial y volumen estimado"></svg>
               <div class="chart-tooltip" id="chart-tooltip" hidden></div>
-
-              <div class="chart-skeleton" id="chart-skeleton" hidden aria-hidden="true">
-                <span></span><span></span><span></span>
-              </div>
-
+              <div class="chart-skeleton" id="chart-skeleton" hidden aria-hidden="true"><span></span><span></span><span></span></div>
               <div class="chart-state" id="empty-state" hidden>
-                <strong>Sin observaciones disponibles para este periodo</strong>
-                <span>Prueba con otro periodo o resolución.</span>
+                <strong data-i18n="Sin observaciones disponibles para este periodo">Sin observaciones disponibles para este periodo</strong>
+                <span data-i18n="Prueba con otro periodo o resolución.">Prueba con otro periodo o resolución.</span>
               </div>
-
               <div class="chart-state is-error" id="error-state" hidden>
-                <strong id="error-title">Datos no disponibles</strong>
-                <span id="error-detail">No fue posible obtener la captura actual.</span>
-                <button class="retry-btn" id="retry-btn" type="button">Reintentar</button>
+                <strong id="error-title" data-i18n="Datos no disponibles">Datos no disponibles</strong>
+                <span id="error-detail" data-i18n="No fue posible obtener la captura actual.">No fue posible obtener la captura actual.</span>
+                <button class="retry-btn" id="retry-btn" type="button" data-i18n="Reintentar">Reintentar</button>
               </div>
             </div>
-          </article>
-        </section>
+          </section>
 
-        <section class="bancos" id="bancos" aria-labelledby="bancos-title">
-          <div class="dashboard-head">
-            <div>
-              <p class="section-kicker">Tipo de cambio en bancos</p>
-              <h2 id="bancos-title"><span id="banco-nombre">Entidades financieras · USD / Bs.</span></h2>
-              <p class="bancos-consulta" id="bancos-consulta"></p>
+          <section class="bloque" id="plataformas">
+            <div class="grafico-head">
+              <h3 id="pl-titulo" data-i18n="Por plataforma · últimos 30 días">Por plataforma · últimos 30 días</h3>
+              <div class="mandos">
+                <div class="vista" id="pl-lado" role="group" aria-label="Lado" data-i18n-aria="Lado">
+                  <button class="active" type="button" data-lado="compra" aria-pressed="true" data-i18n="Venta">Venta</button>
+                  <button type="button" data-lado="venta" aria-pressed="false" data-i18n="Compra">Compra</button>
+                </div>
+              </div>
             </div>
+            <div class="ranking-cab"><span data-i18n="Plataforma">Plataforma</span><span data-i18n="Volumen">Volumen</span><span data-i18n="Precio ponderado">Precio ponderado</span><span data-i18n="Participación">Participación</span></div>
+            <ol class="ranking" id="pl-ranking"></ol>
+            <div class="legend estatica" id="pl-leyenda"></div>
+            <div class="chart-wrap no-volume" id="pl-wrap">
+              <svg class="grafico-linea" id="pl-chart" role="img" aria-label="Volumen diario por plataforma" data-i18n-aria="Volumen diario por plataforma"></svg>
+              <div class="chart-tooltip" id="pl-tip" hidden></div>
+            </div>
+            <p class="aviso-error" id="pl-error" hidden data-i18n="No fue posible cargar el volumen por plataforma.">No fue posible cargar el volumen por plataforma.</p>
+          </section>
+
+          <details class="metodologia">
+            <summary><span data-i18n="Metodología">Metodología</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></summary>
+            <div class="cuerpo">
+              <p data-i18n="P2P Nowcast monitorea de forma periódica los anuncios disponibles en mercados P2P y sigue su evolución en el tiempo. A partir de anuncios comparables y de cambios observados en las cantidades ofertadas, el sistema estima la actividad transaccional del mercado y los precios a los que esta actividad estaría ocurriendo.">P2P Nowcast monitorea de forma periódica los anuncios disponibles en mercados P2P y sigue su evolución en el tiempo. A partir de anuncios comparables y de cambios observados en las cantidades ofertadas, el sistema estima la actividad transaccional del mercado y los precios a los que esta actividad estaría ocurriendo.</p>
+              <p data-i18n="Los resultados corresponden a estimaciones construidas a partir de información pública de los anuncios y no a registros directos de transacciones ejecutadas. Para mejorar su representatividad, únicamente se consideran observaciones que cumplen criterios internos de consistencia y comparabilidad.">Los resultados corresponden a estimaciones construidas a partir de información pública de los anuncios y no a registros directos de transacciones ejecutadas. Para mejorar su representatividad, únicamente se consideran observaciones que cumplen criterios internos de consistencia y comparabilidad.</p>
+              <p class="nota" data-i18n="El tipo de cambio oficial se toma tal como lo publica el Banco Central de Bolivia.">El tipo de cambio oficial se toma tal como lo publica el Banco Central de Bolivia.</p>
+            </div>
+          </details>
+
+          <p class="fuente" data-i18n="Fuente: Binance P2P, Bybit P2P y Bitget P2P · Banco Central de Bolivia">Fuente: Binance P2P, Bybit P2P y Bitget P2P · Banco Central de Bolivia</p>
+        </div>
+      </section>
+
+      <section class="sec" id="observado">
+        <div class="env">
+          <div class="sec-cab">
+            <p class="kicker" data-i18n="Top 5 de anuncios · USDT">Top 5 de anuncios · USDT</p>
+            <h2 class="grad" data-i18n="Precio observado">Precio observado</h2>
+          </div>
+          <p class="captura" id="ob-hora" data-i18n="Cargando">Cargando</p>
+
+          <div class="metricas" aria-live="polite">
+            <article class="metrica acento-venta">
+              <span class="metric-title" data-i18n="P2P Venta · Bs.">P2P Venta · Bs.</span>
+              <strong id="ob-venta">—</strong>
+              <span class="metric-note" data-i18n="promedio de las tres plataformas">promedio de las tres plataformas</span>
+            </article>
+            <article class="metrica acento-compra">
+              <span class="metric-title" data-i18n="P2P Compra · Bs.">P2P Compra · Bs.</span>
+              <strong id="ob-compra">—</strong>
+              <span class="metric-note" data-i18n="promedio de las tres plataformas">promedio de las tres plataformas</span>
+            </article>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Venta − Compra · Bs.">Venta − Compra · Bs.</span>
+              <strong id="ob-dif">—</strong>
+              <span class="metric-note" id="ob-dif-nota"></span>
+            </article>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Más barata para comprar">Más barata para comprar</span>
+              <strong class="nombre" id="ob-barata">—</strong>
+              <span class="metric-note" id="ob-barata-nota"></span>
+            </article>
+          </div>
+          <div class="metricas segunda" id="ob-plataformas" aria-live="polite"></div>
+
+          <section class="bloque">
+            <div class="grafico-head">
+              <h3 data-i18n="Cada 5 minutos">Cada 5 minutos</h3>
+              <div class="mandos">
+                <div class="vista" id="ob-lado" role="group" aria-label="Lado" data-i18n-aria="Lado">
+                  <button class="active" type="button" data-lado="venta" aria-pressed="true" data-i18n="Venta">Venta</button>
+                  <button type="button" data-lado="compra" aria-pressed="false" data-i18n="Compra">Compra</button>
+                </div>
+                <div class="vista" id="ob-rango" role="group" aria-label="Periodo" data-i18n-aria="Periodo">
+                  <button class="active" type="button" data-dias="1" aria-pressed="true">24H</button>
+                  <button type="button" data-dias="7" aria-pressed="false">7D</button>
+                </div>
+              </div>
+            </div>
+            <div class="legend estatica" id="ob-leyenda"></div>
+            <div class="chart-wrap no-volume" id="ob-wrap-5m">
+              <svg class="grafico-linea" id="ob-5m" role="img" aria-label="Precio observado cada 5 minutos por plataforma" data-i18n-aria="Precio observado cada 5 minutos por plataforma"></svg>
+              <div class="chart-tooltip" id="ob-tip-5m" hidden></div>
+            </div>
+          </section>
+
+          <section class="bloque">
+            <div class="grafico-head">
+              <h3 data-i18n="Serie diaria">Serie diaria</h3>
+            </div>
+            <div class="legend estatica">
+              <span data-i18n="P2P Venta"><i class="swatch" style="background:var(--verde)"></i>P2P Venta</span>
+              <span data-i18n="P2P Compra"><i class="swatch" style="background:var(--celeste)"></i>P2P Compra</span>
+            </div>
+            <div class="chart-wrap no-volume" id="ob-wrap-1d">
+              <svg class="grafico-linea" id="ob-1d" role="img" aria-label="Precio observado diario" data-i18n-aria="Precio observado diario"></svg>
+              <div class="chart-tooltip" id="ob-tip-1d" hidden></div>
+            </div>
+          </section>
+
+          <p class="aviso-error" id="ob-error" hidden data-i18n="No fue posible cargar el precio observado.">No fue posible cargar el precio observado.</p>
+          <p class="fuente" data-i18n="Fuente: Binance P2P, Bybit P2P y Bitget P2P. Mediana de los cinco primeros anuncios de cada plataforma en cada captura de 5 minutos">Fuente: Binance P2P, Bybit P2P y Bitget P2P. Mediana de los cinco primeros anuncios de cada plataforma en cada captura de 5 minutos</p>
+
+          <section class="bloque">
+            <div class="grafico-head">
+              <h3 id="historico-titulo"></h3>
+            </div>
+            <div class="legend estatica">
+              <span data-i18n="P2P Venta"><i class="swatch" style="background:var(--verde)"></i>P2P Venta</span>
+              <span data-i18n="P2P Compra"><i class="swatch" style="background:var(--celeste)"></i>P2P Compra</span>
+            </div>
+            <picture>
+              <source media="(max-width: 639px)" srcset="assets/historico/p2parmy-390.png" data-ancho="390" width="700" height="680">
+              <source media="(max-width: 899px)" srcset="assets/historico/p2parmy-768.png" data-ancho="768" width="1456" height="760">
+              <source media="(max-width: 1199px)" srcset="assets/historico/p2parmy-1024.png" data-ancho="1024" width="1920" height="862">
+              <img class="historico-img" id="historico-img" src="assets/historico/p2parmy-1440.png" data-ancho="1440" width="2272" height="860" loading="lazy" decoding="async" draggable="false" alt="">
+            </picture>
+            <p class="fuente" id="historico-fuente"></p>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="bancos">
+        <div class="env">
+          <div class="sec-cab">
+            <p class="kicker" data-i18n="Entidades financieras">Entidades financieras</p>
+            <h2 class="grad" data-i18n="Tipo de cambio en bancos">Tipo de cambio en bancos</h2>
           </div>
 
-          <div class="bancos-selector" id="bancos-selector" role="group" aria-label="Seleccionar entidad financiera"></div>
+          <div class="selector-centro">
+            <div class="chips" id="bancos-selector" role="group" aria-label="Seleccionar entidad financiera" data-i18n-aria="Seleccionar entidad financiera"></div>
+          </div>
+          <p class="captura" id="bancos-consulta"></p>
+          <p class="aviso-error" id="bancos-error" hidden data-i18n="No fue posible obtener las cotizaciones de las entidades financieras.">No fue posible obtener las cotizaciones de las entidades financieras.</p>
 
-          <p class="bancos-error" id="bancos-error" hidden>No fue posible obtener las cotizaciones de las entidades financieras.</p>
-
-          <div class="metrics" aria-live="polite">
-            <article class="metric-card accent-venta">
-              <span class="metric-title">Banco Venta · Bs.</span>
+          <div class="metricas" aria-live="polite">
+            <article class="metrica acento-venta">
+              <span class="metric-title" data-i18n="Banco Venta · Bs.">Banco Venta · Bs.</span>
               <strong id="banco-venta">—</strong>
               <span class="delta" id="banco-delta-venta">—</span>
             </article>
-
-            <article class="metric-card accent-compra">
-              <span class="metric-title">Banco Compra · Bs.</span>
+            <article class="metrica acento-compra">
+              <span class="metric-title" data-i18n="Banco Compra · Bs.">Banco Compra · Bs.</span>
               <strong id="banco-compra">—</strong>
               <span class="delta" id="banco-delta-compra">—</span>
             </article>
-
-            <article class="metric-card accent-tco">
-              <span class="metric-title">TCO Venta · Bs.<em class="stamp" id="banco-tco-venta-stamp"></em></span>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="TCO Venta · Bs.">TCO Venta · Bs.<em class="stamp" id="banco-tco-venta-stamp"></em></span>
               <strong id="banco-tco-venta">—</strong>
               <span class="metric-note">Banco Central de Bolivia</span>
             </article>
-
-            <article class="metric-card accent-tco">
-              <span class="metric-title">TCO Compra · Bs.<em class="stamp" id="banco-tco-compra-stamp"></em></span>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="TCO Compra · Bs.">TCO Compra · Bs.<em class="stamp" id="banco-tco-compra-stamp"></em></span>
               <strong id="banco-tco-compra">—</strong>
               <span class="metric-note">Banco Central de Bolivia</span>
             </article>
           </div>
-
-          <div class="metrics metrics-secondary" aria-live="polite">
-            <article class="metric-card accent-brecha">
-              <span class="metric-title">Brecha Venta · Bs.</span>
+          <div class="metricas segunda" aria-live="polite">
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Brecha Venta · Bs.">Brecha Venta · Bs.</span>
               <strong id="banco-brecha-venta">—</strong>
               <span class="metric-note" id="banco-brecha-venta-pct">—</span>
             </article>
-
-            <article class="metric-card accent-brecha">
-              <span class="metric-title">Brecha Compra · Bs.</span>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Brecha Compra · Bs.">Brecha Compra · Bs.</span>
               <strong id="banco-brecha-compra">—</strong>
               <span class="metric-note" id="banco-brecha-compra-pct">—</span>
             </article>
-
-            <article class="metric-card">
-              <span class="metric-title">Spread del banco · Bs.</span>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Spread del banco · Bs.">Spread del banco · Bs.</span>
               <strong id="banco-spread">—</strong>
               <span class="metric-note" id="banco-spread-pct">—</span>
             </article>
-
-            <article class="metric-card">
-              <span class="metric-title">Cambios de cotización</span>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Cambios de cotización">Cambios de cotización</span>
               <strong id="banco-cambios">—</strong>
               <span class="metric-note" id="banco-cambios-nota">—</span>
             </article>
           </div>
 
-          <article class="chart-card">
-            <div class="chart-toolbar">
-              <div class="control-group">
-                <span class="control-label">Periodo</span>
-                <div class="segmented" id="bancos-rango" role="group" aria-label="Periodo del gráfico de bancos">
+          <section class="bloque">
+            <div class="grafico-head">
+              <h3 id="banco-nombre" data-i18n="Entidades financieras · USD / Bs.">Entidades financieras · USD / Bs.</h3>
+              <div class="mandos">
+                <div class="vista" id="bancos-rango" role="group" aria-label="Periodo del gráfico de bancos" data-i18n-aria="Periodo del gráfico de bancos">
                   <button type="button" data-dias="1">24H</button>
                   <button class="active" type="button" data-dias="7">7D</button>
                   <button type="button" data-dias="30">30D</button>
                 </div>
               </div>
             </div>
-
-            <div class="legend" id="bancos-leyenda" aria-label="Series del gráfico de bancos"></div>
-
+            <div class="legend" id="bancos-leyenda" aria-label="Series del gráfico de bancos" data-i18n-aria="Series del gráfico de bancos"></div>
             <div class="chart-wrap no-volume" id="banco-wrap">
-              <svg id="banco-chart" role="img" aria-label="Compra y venta de la entidad frente al tipo de cambio oficial"></svg>
+              <svg id="banco-chart" role="img" aria-label="Compra y venta de la entidad frente al tipo de cambio oficial" data-i18n-aria="Compra y venta de la entidad frente al tipo de cambio oficial"></svg>
               <div class="chart-tooltip" id="banco-tooltip" hidden></div>
               <div class="chart-state" id="bancos-vacio" hidden>
-                <strong>Sin cotizaciones para este periodo</strong>
-                <span>Prueba con otro periodo o con otra entidad.</span>
+                <strong data-i18n="Sin cotizaciones para este periodo">Sin cotizaciones para este periodo</strong>
+                <span data-i18n="Prueba con otro periodo o con otra entidad.">Prueba con otro periodo o con otra entidad.</span>
               </div>
             </div>
-          </article>
+          </section>
 
-          <article class="chart-card bancos-resumen">
-            <div class="bancos-resumen-head">
-              <h3>Últimos 7 días · USD</h3>
-              <p>Valor vigente al cierre de cada día: venta arriba, compra abajo. ▲▼ marca los días en que la entidad cambió su venta.</p>
-            </div>
+          <section class="bloque tabla-bloque">
+            <h3 data-i18n="Últimos 7 días · USD">Últimos 7 días · USD</h3>
             <div class="tabla-scroll">
               <table class="bancos-tabla" id="bancos-tabla"></table>
             </div>
-          </article>
-        </section>
+          </section>
 
-        <section class="methodology">
-          <details id="methodology-box">
-            <summary>
-              <span>Metodología</span>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
-            </summary>
-            <div class="methodology-body">
-              <p>
-                P2P Nowcast monitorea de forma periódica los anuncios disponibles en mercados P2P
-                y sigue su evolución en el tiempo. A partir de anuncios comparables y de cambios
-                observados en las cantidades ofertadas, el sistema estima la actividad transaccional
-                del mercado y los precios a los que esta actividad estaría ocurriendo.
-              </p>
-              <p>
-                Los resultados corresponden a estimaciones construidas a partir de información
-                pública de los anuncios y no a registros directos de transacciones ejecutadas.
-                Para mejorar su representatividad, únicamente se consideran observaciones que
-                cumplen criterios internos de consistencia y comparabilidad.
-              </p>
-              <p class="methodology-note">
-                El tipo de cambio oficial se toma tal como lo publica el Banco Central de Bolivia.
-              </p>
+          <p class="fuente" data-i18n="Fuente: sitios web de las entidades financieras · Banco Central de Bolivia">Fuente: sitios web de las entidades financieras · Banco Central de Bolivia</p>
+        </div>
+      </section>
+
+      <section class="sec" id="operaciones">
+        <div class="env">
+          <div class="sec-cab">
+            <p class="kicker">Banco Central de Bolivia</p>
+            <h2 class="grad" data-i18n="Operaciones cambiarias de los bancos">Operaciones cambiarias de los bancos</h2>
+          </div>
+          <p class="captura" id="op-corte" data-i18n="Cargando">Cargando</p>
+
+          <div class="metricas" aria-live="polite">
+            <article class="metrica acento-venta">
+              <span class="metric-title" data-i18n="Compras del día · USD">Compras del día · USD</span>
+              <strong id="op-monto">—</strong>
+              <span class="metric-note" id="op-monto-nota"></span>
+            </article>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Operaciones">Operaciones</span>
+              <strong id="op-numero">—</strong>
+              <span class="metric-note" data-i18n="transacciones con clientes">transacciones con clientes</span>
+            </article>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Precio ponderado · Bs.">Precio ponderado · Bs.</span>
+              <strong id="op-precio">—</strong>
+              <span class="metric-note" id="op-precio-nota"></span>
+            </article>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="TCO del corte · Bs.">TCO del corte · Bs.</span>
+              <strong id="op-tco">—</strong>
+              <span class="metric-note" id="op-tco-nota"></span>
+            </article>
+          </div>
+          <div class="metricas segunda" aria-live="polite">
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Más compró en el día">Más compró en el día</span>
+              <strong class="nombre" id="op-lider-dia">—</strong>
+              <span class="metric-note" id="op-lider-dia-nota"></span>
+            </article>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Más compró en 30 cortes">Más compró en 30 cortes</span>
+              <strong class="nombre" id="op-lider-30">—</strong>
+              <span class="metric-note" id="op-lider-30-nota"></span>
+            </article>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Precio más alto del día">Precio más alto del día</span>
+              <strong class="nombre" id="op-alto">—</strong>
+              <span class="metric-note" id="op-alto-nota"></span>
+            </article>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Precio más bajo del día">Precio más bajo del día</span>
+              <strong class="nombre" id="op-bajo">—</strong>
+              <span class="metric-note" id="op-bajo-nota"></span>
+            </article>
+          </div>
+
+          <section class="bloque">
+            <div class="grafico-head">
+              <h3 data-i18n="Compras diarias · últimos 30 cortes">Compras diarias · últimos 30 cortes</h3>
             </div>
-          </details>
-        </section>
+            <div class="legend estatica">
+              <span data-i18n="Precio ponderado"><i class="swatch" style="background:var(--celeste)"></i>Precio ponderado</span>
+              <span data-i18n="TCO"><i class="swatch dash" style="color:var(--tco)"></i>TCO</span>
+              <span data-i18n="Monto comprado"><i class="swatch bar" style="background:var(--verde)"></i>Monto comprado</span>
+            </div>
+            <div class="chart-wrap" id="op-wrap">
+              <svg id="op-chart" role="img" aria-label="Monto comprado por los bancos, precio ponderado y TCO de los últimos 30 cortes" data-i18n-aria="Monto comprado por los bancos, precio ponderado y TCO de los últimos 30 cortes"></svg>
+              <div class="chart-tooltip" id="op-tip" hidden></div>
+            </div>
+          </section>
 
-        <footer class="page-foot">
-          <span>Fuentes: Binance P2P · Bybit P2P · Bitget P2P · Banco Central de Bolivia · sitios web de las entidades financieras</span>
-          <span>Datos de mercado estimados a partir de anuncios públicos.</span>
-          <span id="foot-capture">Última captura: —</span>
-        </footer>
-      </main>
-    </div>
+          <section class="bloque">
+            <div class="grafico-head">
+              <h3 data-i18n="Por banco">Por banco</h3>
+              <div class="mandos">
+                <div class="vista" id="op-ventana" role="group" aria-label="Período del ranking" data-i18n-aria="Período del ranking">
+                  <button class="active" type="button" data-ventana="dia" aria-pressed="true" data-i18n="Último corte">Último corte</button>
+                  <button type="button" data-ventana="30" aria-pressed="false" data-i18n="30 cortes">30 cortes</button>
+                </div>
+              </div>
+            </div>
+            <div class="ranking-cab"><span data-i18n="Banco">Banco</span><span data-i18n="Monto · USD">Monto · USD</span><span data-i18n="Precio ponderado">Precio ponderado</span><span data-i18n="Operaciones">Operaciones</span></div>
+            <ol class="ranking" id="op-ranking"></ol>
+          </section>
+
+          <p class="aviso-error" id="op-error" hidden data-i18n="No fue posible cargar las operaciones cambiarias del BCB.">No fue posible cargar las operaciones cambiarias del BCB.</p>
+          <p class="fuente" data-i18n="Fuente: Banco Central de Bolivia, operaciones de compra de dólares de las entidades financieras con sus clientes">Fuente: Banco Central de Bolivia, operaciones de compra de dólares de las entidades financieras con sus clientes</p>
+        </div>
+      </section>
+
+      <section class="sec" id="reservas">
+        <div class="env">
+          <div class="sec-cab">
+            <p class="kicker">Banco Central de Bolivia</p>
+            <h2 class="grad" data-i18n="Reservas internacionales">Reservas internacionales</h2>
+          </div>
+
+          <div class="metricas" aria-live="polite">
+            <article class="metrica acento-venta">
+              <span class="metric-title" data-i18n="RIN · millones USD">RIN · millones USD</span>
+              <strong id="rv-rin">—</strong>
+              <span class="metric-note" id="rv-rin-nota"></span>
+            </article>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Cierre de mes">Cierre de mes</span>
+              <strong id="rv-mes">—</strong>
+              <span class="metric-note" id="rv-mes-nota"></span>
+            </article>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Oro">Oro</span>
+              <strong id="rv-oro">—</strong>
+              <span class="metric-note" id="rv-oro-nota"></span>
+            </article>
+            <article class="metrica">
+              <span class="metric-title" data-i18n="Divisas">Divisas</span>
+              <strong id="rv-divisas">—</strong>
+              <span class="metric-note" id="rv-divisas-nota"></span>
+            </article>
+          </div>
+
+          <section class="bloque">
+            <div class="grafico-head">
+              <h3 id="rv-titulo" data-i18n="Reservas Internacionales Netas">Reservas Internacionales Netas</h3>
+              <div class="mandos">
+                <div class="vista" id="rv-vista" role="group" aria-label="Frecuencia" data-i18n-aria="Frecuencia">
+                  <button class="active" type="button" data-vista="diaria" aria-pressed="true" data-i18n="Diaria">Diaria</button>
+                  <button type="button" data-vista="mensual" aria-pressed="false" data-i18n="Mensual">Mensual</button>
+                  <button type="button" data-vista="anual" aria-pressed="false" data-i18n="Anual">Anual</button>
+                </div>
+              </div>
+            </div>
+            <div class="chart-wrap no-volume" id="rv-wrap">
+              <svg class="grafico-linea" id="rv-chart" role="img" aria-label="Reservas Internacionales Netas" data-i18n-aria="Reservas Internacionales Netas"></svg>
+              <div class="chart-tooltip" id="rv-tip" hidden></div>
+            </div>
+          </section>
+
+          <section class="bloque">
+            <div class="grafico-head">
+              <h3 data-i18n="Tipo de cambio paralelo según el BCB">Tipo de cambio paralelo según el BCB</h3>
+            </div>
+            <div class="legend estatica">
+              <span data-i18n="Tipo de cambio paralelo"><i class="swatch" style="background:var(--verde)"></i>Tipo de cambio paralelo</span>
+              <span data-i18n="Valor referencial del dólar"><i class="swatch" style="background:var(--celeste)"></i>Valor referencial del dólar</span>
+              <span data-i18n="TCO"><i class="swatch dash" style="color:var(--tco)"></i>TCO</span>
+              <span data-i18n="Oficial fijo"><i class="swatch dash" style="color:var(--tco-2)"></i>Oficial fijo</span>
+            </div>
+            <div class="chart-wrap no-volume" id="pb-wrap">
+              <svg class="grafico-linea" id="pb-chart" role="img" aria-label="Tipo de cambio paralelo mensual publicado por el BCB" data-i18n-aria="Tipo de cambio paralelo mensual publicado por el BCB"></svg>
+              <div class="chart-tooltip" id="pb-tip" hidden></div>
+            </div>
+            <p class="fuente" id="pb-fuente"></p>
+          </section>
+
+          <p class="aviso-error" id="rv-error" hidden data-i18n="No fue posible cargar los datos del BCB.">No fue posible cargar los datos del BCB.</p>
+          <p class="fuente" data-i18n="Fuente: Banco Central de Bolivia, Estadísticas Semanales y Reservas Internacionales Netas por componentes">Fuente: Banco Central de Bolivia, Estadísticas Semanales y Reservas Internacionales Netas por componentes</p>
+        </div>
+      </section>
+
+      <section class="sec" id="noticias">
+        <div class="env">
+          <div class="titulares" id="titulares" aria-label="Últimos titulares" data-i18n-aria="Últimos titulares">
+            <div class="titulares-pista" id="titulares-pista"></div>
+          </div>
+        </div>
+      </section>
+    </main>
 
     <div class="tip-bubble" id="tip-bubble" hidden></div>
 
-    <script src="assets/app.js?v=20260825-ui13" defer></script>
-    <script src="assets/bancos.js?v=20260929-bancos3" defer></script>
+    <script src="assets/rutas.js?v=1" defer></script>
+    <script src="assets/idioma.js?v=3" defer></script>
+    <script src="assets/app.js?v=2" defer></script>
+    <script src="assets/bancos.js?v=2" defer></script>
+    <script src="assets/portada.js?v=2" defer></script>
+    <script src="assets/operaciones.js?v=2" defer></script>
+    <script src="assets/observado.js?v=2" defer></script>
+    <script src="assets/plataformas.js?v=3" defer></script>
+    <script src="assets/graficos.js?v=1" defer></script>
+    <script src="assets/bcb.js?v=2" defer></script>
+    <script src="assets/noticias.js?v=3" defer></script>
+    <script src="assets/historico.js?v=1" defer></script>
     <script data-goatcounter="https://bohozx.goatcounter.com/count" async src="/assets/goatcounter.js"></script>
   </body>
 </html>

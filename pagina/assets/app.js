@@ -57,9 +57,6 @@ function availableFrequencies(asset) {
     .map((option) => option.id);
 }
 
-/* Serie oficial publicada en el repositorio publico TCO-BCB. */
-const TCO_URL = "https://raw.githubusercontent.com/BohozX/TCO-BCB/main/datos/tco.csv";
-
 const state = {
   asset: "USDT",
   frequency: "5m",
@@ -71,6 +68,8 @@ const state = {
   asOf: null,
   loading: false,
   token: 0,
+  estado: null,
+  error: null,
 };
 
 // El dato conserva su clave contractual. La etiqueta se muestra desde la
@@ -140,36 +139,50 @@ function sideSeries() {
 
 const enSpread = () => state.side === "spread";
 
-const frequencyLabels = { "5m": "5 minutos", "1h": "1 hora", "1d": "1 día" };
-const integerFormat = new Intl.NumberFormat("es-BO", { maximumFractionDigits: 0 });
-const priceFormat = new Intl.NumberFormat("es-BO", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-const tcoFormat = new Intl.NumberFormat("es-BO", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-const percentFormat = new Intl.NumberFormat("es-BO", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-const compactFormat = new Intl.NumberFormat("es-BO", {
-  notation: "compact",
-  maximumFractionDigits: 2,
-});
 const timeZone = "America/La_Paz";
-const fullDateFormat = new Intl.DateTimeFormat("es-BO", {
-  timeZone, day: "2-digit", month: "short", year: "numeric",
-  hour: "2-digit", minute: "2-digit", hour12: false,
-});
-const shortDateFormat = new Intl.DateTimeFormat("es-BO", {
-  timeZone, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false,
-});
-const dayFormat = new Intl.DateTimeFormat("es-BO", { timeZone, day: "2-digit", month: "short" });
-const diaLargoFormat = new Intl.DateTimeFormat("es-BO", {
-  timeZone, day: "2-digit", month: "short", year: "numeric",
-});
+let integerFormat;
+let priceFormat;
+let tcoFormat;
+let percentFormat;
+let compactFormat;
+let fullDateFormat;
+let shortDateFormat;
+let dayFormat;
+let diaLargoFormat;
+
+function prepararFormatos() {
+  const regional = configuracionRegional();
+  integerFormat = new Intl.NumberFormat(regional, { maximumFractionDigits: 0 });
+  priceFormat = new Intl.NumberFormat(regional, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  tcoFormat = new Intl.NumberFormat(regional, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  percentFormat = new Intl.NumberFormat(regional, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  compactFormat = new Intl.NumberFormat(regional, {
+    notation: "compact",
+    maximumFractionDigits: 2,
+  });
+  fullDateFormat = new Intl.DateTimeFormat(regional, {
+    timeZone, day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+  shortDateFormat = new Intl.DateTimeFormat(regional, {
+    timeZone, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+  dayFormat = new Intl.DateTimeFormat(regional, { timeZone, day: "2-digit", month: "short" });
+  diaLargoFormat = new Intl.DateTimeFormat(regional, {
+    timeZone, day: "2-digit", month: "short", year: "numeric",
+  });
+}
+
+prepararFormatos();
 /* Fecha de hoy en Bolivia, en formato AAAA-MM-DD, para saber que TCO rige ahora. */
 const isoBoFormat = new Intl.DateTimeFormat("en-CA", {
   timeZone, year: "numeric", month: "2-digit", day: "2-digit",
@@ -250,16 +263,20 @@ function aggregatePoints(points, ms) {
 async function loadSeries(asset, side, frequency) {
   const base = baseOf(frequency);
   const key = `${asset}/${side.path}/${base}`;
-  const response = await fetch(`data/${key}.json?v=${Date.now()}`, { cache: "no-store" });
-  if (!response.ok) throw new Error(`No se pudo cargar ${key}`);
-  const payload = await response.json();
+  let payload;
+  try {
+    payload = await cargarDatos("p2p", [asset, side.path, base]);
+  } catch (error) {
+    if (error.estado) throw Object.assign(new Error(key), { clave: "No se pudo cargar {clave}", valores: { clave: key } });
+    throw error;
+  }
   if (
     payload.window_days !== 30
     || payload.asset !== asset
     || payload.side !== side.key
     || payload.frequency !== base
   ) {
-    throw new Error("El archivo público no cumple el contrato esperado");
+    throw Object.assign(new Error(key), { clave: "El archivo público no cumple el contrato esperado" });
   }
   if (DERIVED[frequency]) {
     payload.points = aggregatePoints(payload.points || [], DERIVED[frequency].ms);
@@ -277,9 +294,7 @@ async function loadMarket(asset, frequency) {
 /* El CSV se consume tal cual: una fila por fecha de vigencia con los valores de
    compra y venta ya publicados. No se interpola ni se arrastra ningun valor. */
 async function loadTco() {
-  const response = await fetch(`${TCO_URL}?v=${Date.now()}`, { cache: "no-store" });
-  if (!response.ok) throw new Error("No se pudo cargar el tipo de cambio oficial");
-  const text = await response.text();
+  const text = await cargarDatos("tco", [], "texto");
   const lines = text.trim().split(/\r?\n/);
   const header = lines[0].split(",").map((item) => item.trim());
   const iVig = header.indexOf("vigencia");
@@ -417,7 +432,13 @@ function renderDelta(node, change) {
     return;
   }
   node.classList.add(change >= 0 ? "up" : "down");
-  node.textContent = `${change >= 0 ? "▲" : "▼"} ${percentFormat.format(Math.abs(change))} %`;
+  node.textContent = `${change >= 0 ? "▲" : "▼"} ${traducir("{n} %", { n: percentFormat.format(Math.abs(change)) })}`;
+}
+
+function rotuloBrecha() {
+  $("#metric-gap-title").textContent = enSpread()
+    ? traducir("Brecha P2P − TCO · Bs.")
+    : traducir(state.side === "venta" ? "Brecha Venta · Bs." : "Brecha Compra · Bs.");
 }
 
 /* El TCO que rige hoy. El BCB publica el de manana por adelantado, pero no entra
@@ -455,33 +476,32 @@ function renderMetrics(rows) {
   const compra = summaries.compra.price;
   if (venta == null || compra == null) {
     $("#metric-spread").textContent = "—";
-    $("#metric-spread-pct").textContent = "Sin precios en el rango";
+    $("#metric-spread-pct").textContent = traducir("Sin precios en el rango");
   } else {
     const spread = Number(venta) - Number(compra);
     $("#metric-spread").textContent = priceFormat.format(spread);
     $("#metric-spread-pct").textContent = Number(compra) === 0
       ? "—"
-      : `${percentFormat.format((spread / Number(compra)) * 100)} % sobre el precio de compra`;
+      : traducir("{pct} % sobre el precio de compra", { pct: percentFormat.format((spread / Number(compra)) * 100) });
   }
 
   /* Brecha del lado activo: precio P2P frente al TCO vigente del mismo lado. */
+  rotuloBrecha();
   if (enSpread()) {
-    $("#metric-gap-title").textContent = "Brecha P2P − TCO · Bs.";
     $("#metric-gap").textContent = "—";
-    $("#metric-gap-pct").textContent = "Elige venta o compra para ver su brecha";
+    $("#metric-gap-pct").textContent = traducir("Elige venta o compra para ver su brecha");
   } else {
     const etiqueta = state.side === "venta" ? "Venta" : "Compra";
-    $("#metric-gap-title").textContent = `Brecha ${etiqueta} · Bs.`;
     const p2p = summaries[state.side].price;
     const vig = tcoVigente();
     const oficialLado = vig ? vig[state.side] : null;
     if (p2p == null || oficialLado == null) {
       $("#metric-gap").textContent = "—";
-      $("#metric-gap-pct").textContent = "P2P frente al tipo de cambio oficial";
+      $("#metric-gap-pct").textContent = traducir("P2P frente al tipo de cambio oficial");
     } else {
       const gap = Number(p2p) - Number(oficialLado);
       $("#metric-gap").textContent = priceFormat.format(gap);
-      $("#metric-gap-pct").textContent = `${percentFormat.format((gap / Number(oficialLado)) * 100)} % sobre el TCO ${etiqueta}`;
+      $("#metric-gap-pct").textContent = traducir(`{pct} % sobre el TCO ${etiqueta}`, { pct: percentFormat.format((gap / Number(oficialLado)) * 100) });
     }
   }
 
@@ -503,7 +523,7 @@ function renderMetrics(rows) {
     }
     const cambio = Number(actual) - Number(anterior);
     const signo = cambio > 0 ? "▲" : cambio < 0 ? "▼" : "=";
-    const pct = Number(anterior) === 0 ? "" : ` · ${percentFormat.format((cambio / Number(anterior)) * 100)} %`;
+    const pct = Number(anterior) === 0 ? "" : traducir(" · {n} %", { n: percentFormat.format((cambio / Number(anterior)) * 100) });
     const nota = $(`#metric-tco-${lado}-note`);
     nota.className = `metric-note delta ${cambio > 0 ? "up" : cambio < 0 ? "down" : ""}`.trim();
     nota.textContent =
@@ -670,7 +690,7 @@ function renderChart(points) {
     }));
     const label = svgElement("text", {
       x: width - geo.padRight + 10, y: (y + 3.5).toFixed(1),
-      fill: "#6d857c", "font-size": 11, "font-family": "JetBrains Mono, monospace",
+      fill: "#7d7d84", "font-size": 11, "font-family": "Geist Mono, monospace",
     });
     label.textContent = tcoFormat.format(value);
     gridGroup.append(label);
@@ -721,7 +741,7 @@ function renderChart(points) {
     svg.append(volumeGroup);
     svg.append(svgElement("line", {
       x1: 0, x2: width - geo.padRight + 4, y1: geo.volumeBase, y2: geo.volumeBase,
-      stroke: "rgba(126,231,178,.10)", "stroke-width": 1,
+      stroke: "rgba(255,255,255,.12)", "stroke-width": 1,
     }));
   }
 
@@ -779,7 +799,7 @@ function renderChart(points) {
     const label = svgElement("text", {
       x: geo.xOf(position).toFixed(1),
       y: height - 8,
-      fill: "#6d857c",
+      fill: "#7d7d84",
       "font-size": 11,
       "text-anchor": index === 0 ? "start" : index === ticks - 1 ? "end" : "middle",
     });
@@ -791,7 +811,7 @@ function renderChart(points) {
   /* crosshair */
   const crosshair = svgElement("line", {
     id: "crosshair", x1: 0, x2: 0, y1: geo.priceTop - 6, y2: geo.volumeBase,
-    stroke: "rgba(238,246,242,.28)", "stroke-width": 1, "stroke-dasharray": "3 3",
+    stroke: "rgba(255,255,255,.3)", "stroke-width": 1, "stroke-dasharray": "3 3",
     visibility: "hidden",
   });
   svg.append(crosshair);
@@ -837,15 +857,15 @@ function showTooltip(event) {
   sideSeries().forEach((serie) => {
     const value = point[serie.id];
     if (value == null || !Number.isFinite(Number(value))) return;
-    rows.push(`<div class="tip-row"><span><i class="dot" style="background:${tone[serie.id]}"></i>${serie.label}</span><b>Bs ${priceFormat.format(value)}</b></div>`);
+    rows.push(`<div class="tip-row"><span><i class="dot" style="background:${tone[serie.id]}"></i>${traducir(serie.label)}</span><b>Bs ${priceFormat.format(value)}</b></div>`);
   });
 
   const pP2p = point[view.p2p];
   const pTco = point[view.tco];
   if (pP2p != null && pTco != null && Number(pTco) !== 0) {
     const gap = Number(pP2p) - Number(pTco);
-    const nombre = enSpread() ? "Spread P2P" : "Brecha";
-    rows.push(`<div class="tip-row"><span>${nombre}</span><b>Bs ${priceFormat.format(gap)} · ${percentFormat.format((gap / Number(pTco)) * 100)} %</b></div>`);
+    const nombre = traducir(enSpread() ? "Spread P2P" : "Brecha");
+    rows.push(`<div class="tip-row"><span>${nombre}</span><b>Bs ${priceFormat.format(gap)} · ${traducir("{n} %", { n: percentFormat.format((gap / Number(pTco)) * 100) })}</b></div>`);
   }
   const vol = enSpread()
     ? (point.volVenta || 0) + (point.volCompra || 0)
@@ -854,10 +874,10 @@ function showTooltip(event) {
     ? (point.txVenta || 0) + (point.txCompra || 0)
     : (state.side === "venta" ? point.txVenta : point.txCompra);
   if (state.showVolume && vol) {
-    rows.push(`<div class="tip-row"><span>Vol. estimado</span><b>${compactFormat.format(vol)} ${state.asset}</b></div>`);
+    rows.push(`<div class="tip-row"><span>${traducir("Vol. estimado")}</span><b>${compactFormat.format(vol)} ${state.asset}</b></div>`);
   }
   if (tx) {
-    rows.push(`<div class="tip-row"><span>Trans. estimadas</span><b>${integerFormat.format(tx)}</b></div>`);
+    rows.push(`<div class="tip-row"><span>${traducir("Trans. estimadas")}</span><b>${integerFormat.format(tx)}</b></div>`);
   }
 
   const tooltip = $("#chart-tooltip");
@@ -875,26 +895,33 @@ function showTooltip(event) {
 
 /* --------------------------------------------------------------- estados -- */
 
-function setStatus(mode, text) {
+function setStatus(mode, texto) {
+  state.estado = texto;
   const pill = $("#data-status");
   pill.classList.remove("is-ok", "is-error", "is-loading");
   if (mode) pill.classList.add(`is-${mode}`);
-  $("#data-status-text").textContent = text;
+  $("#data-status-text").textContent = texto();
 }
 
 function relativeLabel(iso) {
   const minutes = Math.round((Date.now() - Date.parse(iso)) / 60000);
   if (!Number.isFinite(minutes) || minutes < 0) return "";
-  if (minutes < 1) return "Actualizado hace menos de 1 min";
-  if (minutes < 60) return `Actualizado hace ${minutes} min`;
+  if (minutes < 1) return traducir("hace menos de 1 min");
+  if (minutes < 60) return traducir("hace {n} min", { n: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Actualizado hace ${hours} h`;
-  return `Actualizado hace ${Math.floor(hours / 24)} d`;
+  if (hours < 24) return traducir("hace {n} h", { n: hours });
+  return traducir("hace {n} d", { n: Math.floor(hours / 24) });
+}
+
+function textoError(error) {
+  if (error?.clave) return traducir(error.clave, error.valores);
+  return error?.message || traducir("No fue posible obtener la captura actual.");
 }
 
 function showLoading() {
   state.loading = true;
-  setStatus("loading", "Cargando");
+  state.error = null;
+  setStatus("loading", () => traducir("Cargando"));
   $("#chart-skeleton").hidden = false;
   $("#empty-state").hidden = true;
   $("#error-state").hidden = true;
@@ -917,20 +944,20 @@ function showLoading() {
   ["#metric-tco-venta-stamp", "#metric-tco-compra-stamp"].forEach((id) => {
     $(id).textContent = "";
   });
-  $("#foot-capture").textContent = "Última captura: —";
+  $("#status-rel").textContent = "";
 }
 
-function showError(message) {
+function showError(error) {
   state.loading = false;
   state.rows = [];
-  setStatus("error", "Sin datos");
+  state.error = error || {};
+  setStatus("error", () => traducir("Sin datos"));
   $("#chart-skeleton").hidden = true;
   $("#empty-state").hidden = true;
   $("#error-state").hidden = false;
-  $("#error-detail").textContent = message || "No fue posible obtener la captura actual.";
+  $("#error-detail").textContent = textoError(state.error);
   $("#refresh-btn").classList.remove("is-busy");
-  $("#status-capture").textContent = "—";
-  $("#status-tco").textContent = "—";
+  $("#status-rel").textContent = "";
 }
 
 /* -------------------------------------------------------------- controles -- */
@@ -946,7 +973,7 @@ function renderFrequencySelector() {
     button.dataset.frequency = option.id;
     if (!supported) {
       button.disabled = true;
-      button.dataset.tip = "Disponible próximamente";
+      button.dataset.tip = traducir("Disponible próximamente");
     }
     if (supported && option.id === state.frequency) button.classList.add("active");
     host.append(button);
@@ -965,7 +992,7 @@ function renderLegend() {
     button.type = "button";
     button.dataset.serie = serie.id;
     button.setAttribute("aria-pressed", String(activas.has(serie.id)));
-    button.innerHTML = `<i class="swatch${serie.dash ? " dash" : ""}" style="${serie.dash ? `color:${tone[serie.id]}` : `background:${tone[serie.id]}`}"></i>${serie.label}`;
+    button.innerHTML = `<i class="swatch${serie.dash ? " dash" : ""}" style="${serie.dash ? `color:${tone[serie.id]}` : `background:${tone[serie.id]}`}"></i>${traducir(serie.label)}`;
     host.append(button);
   });
 
@@ -973,7 +1000,7 @@ function renderLegend() {
   volume.type = "button";
   volume.dataset.serie = "volume";
   volume.setAttribute("aria-pressed", String(state.showVolume));
-  volume.innerHTML = `<i class="swatch bar" style="background:${tone[SIDE_VIEW[state.side].p2p]}"></i>Volumen`;
+  volume.innerHTML = `<i class="swatch bar" style="background:${tone[SIDE_VIEW[state.side].p2p]}"></i>${traducir("Volumen")}`;
   host.append(volume);
 
   /* Boton compacto: compara los dos precios P2P entre si. */
@@ -982,8 +1009,8 @@ function renderLegend() {
   spread.className = "legend-icon";
   spread.dataset.serie = "spread";
   spread.setAttribute("aria-pressed", String(enSpread()));
-  spread.setAttribute("aria-label", "Comparar precio de venta y de compra P2P");
-  spread.dataset.tip = "Spread P2P: compara el precio de venta y el de compra entre si";
+  spread.setAttribute("aria-label", traducir("Comparar precio de venta y de compra P2P"));
+  spread.dataset.tip = traducir("Spread P2P: compara el precio de venta y el de compra entre si");
   spread.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M3 8h18M3 16h18"></path><path d="M12 5v3M12 16v3"></path>
     <path d="M9.5 6.5L12 4l2.5 2.5M9.5 17.5L12 20l2.5-2.5"></path></svg>`;
@@ -1003,6 +1030,7 @@ function syncControls() {
   });
   renderFrequencySelector();
   renderLegend();
+  rotuloBrecha();
 }
 
 /* ------------------------------------------------------------------ ciclo -- */
@@ -1041,7 +1069,7 @@ async function refresh() {
     market = await loadMarket(state.asset, state.frequency);
   } catch (error) {
     if (token !== state.token) return;
-    showError(error.message);
+    showError(error);
     return;
   }
 
@@ -1063,21 +1091,11 @@ async function refresh() {
   $("#error-state").hidden = true;
 
   if (asOf) {
-    const completa = fullDateFormat.format(new Date(asOf));
-    $("#foot-capture").textContent = `Última captura: ${completa}`;
-    $("#status-capture").textContent = completa;
-    $("#status-rel").textContent = relativeLabel(asOf) || "—";
-    setStatus(tcoError ? "loading" : "ok", `Última captura · ${shortDateFormat.format(new Date(asOf))}`);
+    $("#status-rel").textContent = relativeLabel(asOf);
+    setStatus(tcoError ? "loading" : "ok", () => traducir("Última captura · {fecha}", { fecha: fullDateFormat.format(new Date(asOf)) }));
   } else {
-    setStatus("error", "Sin captura");
+    setStatus("error", () => traducir("Sin captura"));
   }
-  $("#status-freq").textContent = frequencyLabels[state.frequency] || state.frequency;
-  $("#status-tco").textContent = tcoError
-    ? "No disponible"
-    : (() => {
-      const v = tcoVigente();
-      return v ? `Bs ${tcoFormat.format(v.compra)} / ${tcoFormat.format(v.venta)} (${v.vigencia})` : "—";
-    })();
 
   paint();
 }
@@ -1167,19 +1185,6 @@ function bindEvents() {
   $("#refresh-btn").addEventListener("click", () => { if (!state.loading) refresh(); });
   $("#retry-btn").addEventListener("click", () => { if (!state.loading) refresh(); });
 
-  const statusButton = $("#data-status");
-  statusButton.addEventListener("click", () => {
-    const panel = $("#status-panel");
-    const open = panel.hidden;
-    panel.hidden = !open;
-    statusButton.setAttribute("aria-expanded", String(open));
-  });
-  document.addEventListener("click", (event) => {
-    if (event.target.closest(".status-wrap")) return;
-    $("#status-panel").hidden = true;
-    statusButton.setAttribute("aria-expanded", "false");
-  });
-
   const svg = $("#market-chart");
   svg.addEventListener("pointermove", showTooltip);
   svg.addEventListener("pointerdown", showTooltip);
@@ -1195,8 +1200,21 @@ function bindEvents() {
   });
 
   window.setInterval(() => {
-    if (state.asOf) $("#status-rel").textContent = relativeLabel(state.asOf) || "—";
+    if (state.asOf) $("#status-rel").textContent = relativeLabel(state.asOf);
   }, 60000);
+
+  window.addEventListener("idiomachange", () => {
+    prepararFormatos();
+    hideTooltip();
+    $("#tip-bubble").hidden = true;
+    renderFrequencySelector();
+    renderLegend();
+    rotuloBrecha();
+    if (state.estado) $("#data-status-text").textContent = state.estado();
+    if (state.asOf && $("#status-rel").textContent) $("#status-rel").textContent = relativeLabel(state.asOf);
+    if (state.error) $("#error-detail").textContent = textoError(state.error);
+    if (!state.loading && !state.error) paint();
+  });
 }
 
 restorePreferences();

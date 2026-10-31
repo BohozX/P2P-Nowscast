@@ -1,6 +1,4 @@
 (() => {
-  const URL_BANCOS = "https://raw.githubusercontent.com/BohozX/TC-BANCOS/main/ultimos_30_dias.csv";
-  const URL_TCO = "https://raw.githubusercontent.com/BohozX/TCO-BCB/main/datos/tco.csv";
   const DIA = 86_400_000;
   const HORA = 3_600_000;
   const DIAS_TABLA = 7;
@@ -33,14 +31,19 @@
   ];
   const VISTAS = { venta: ["venta", "tcoVenta"], compra: ["compra", "tcoCompra"], spread: ["venta", "compra"] };
 
-  const fmtPrecio = new Intl.NumberFormat("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-  const fmtEje = new Intl.NumberFormat("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const fmtDif = new Intl.NumberFormat("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" });
-  const fmtPct = new Intl.NumberFormat("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const fmtLargo = new Intl.DateTimeFormat("es-BO", { timeZone: zona, day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
-  const fmtHora = new Intl.DateTimeFormat("es-BO", { timeZone: zona, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
-  const fmtDia = new Intl.DateTimeFormat("es-BO", { timeZone: zona, day: "2-digit", month: "short" });
-  const fmtDiaTabla = new Intl.DateTimeFormat("es-BO", { timeZone: zona, weekday: "short", day: "2-digit", month: "short" });
+  let fmtPrecio, fmtEje, fmtDif, fmtPct, fmtLargo, fmtHora, fmtDia, fmtDiaTabla;
+  function prepararFormatos() {
+    const regional = configuracionRegional();
+    fmtPrecio = new Intl.NumberFormat(regional, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+    fmtEje = new Intl.NumberFormat(regional, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    fmtDif = new Intl.NumberFormat(regional, { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" });
+    fmtPct = new Intl.NumberFormat(regional, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    fmtLargo = new Intl.DateTimeFormat(regional, { timeZone: zona, day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+    fmtHora = new Intl.DateTimeFormat(regional, { timeZone: zona, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+    fmtDia = new Intl.DateTimeFormat(regional, { timeZone: zona, day: "2-digit", month: "short" });
+    fmtDiaTabla = new Intl.DateTimeFormat(regional, { timeZone: zona, weekday: "short", day: "2-digit", month: "short" });
+  }
+  prepararFormatos();
   const fmtIso = new Intl.DateTimeFormat("en-CA", { timeZone: zona, year: "numeric", month: "2-digit", day: "2-digit" });
 
   const estado = { banco: null, dias: 7, lado: "venta", bancos: [], tco: new Map(), fin: null, inicio: null, cargando: false, geo: null };
@@ -210,16 +213,16 @@
       return;
     }
     if (actual === inicial) {
-      el.textContent = "Sin cambios en el periodo";
+      el.textContent = traducir("Sin cambios en el periodo");
       return;
     }
     const pct = ((actual - inicial) / inicial) * 100;
     el.classList.add(actual > inicial ? "up" : "down");
-    el.textContent = `${actual > inicial ? "▲" : "▼"} ${fmtPct.format(Math.abs(pct))} %`;
+    el.textContent = `${actual > inicial ? "▲" : "▼"} ${traducir("{n} %", { n: fmtPct.format(Math.abs(pct)) })}`;
   }
 
   function periodoTexto() {
-    return estado.dias === 1 ? "en las últimas 24 horas" : `en los últimos ${estado.dias} días`;
+    return estado.dias === 1 ? traducir("en las últimas 24 horas") : traducir("en los últimos {n} días", { n: estado.dias });
   }
 
   function metricas(banco) {
@@ -229,7 +232,7 @@
     const tco = estado.tco.get(isoDe(t1));
 
     texto("#banco-venta", precio(actual?.venta));
-    texto("#banco-compra", banco.tieneCompra ? precio(actual?.compra) : "No publica");
+    texto("#banco-compra", banco.tieneCompra ? precio(actual?.compra) : traducir("No publica"));
     $b("#banco-compra").classList.toggle("sin-dato", !banco.tieneCompra);
     delta("#banco-delta-venta", actual?.venta, inicial?.venta);
     delta("#banco-delta-compra", actual?.compra, inicial?.compra);
@@ -241,18 +244,18 @@
 
     const brechaV = actual?.venta != null && tco?.venta != null ? actual.venta - tco.venta : null;
     texto("#banco-brecha-venta", brechaV == null ? "—" : fmtDif.format(brechaV));
-    texto("#banco-brecha-venta-pct", brechaV == null ? "Sin tipo de cambio oficial"
-      : `${fmtDif.format((brechaV / tco.venta) * 100)} % sobre el TCO Venta`);
+    texto("#banco-brecha-venta-pct", brechaV == null ? traducir("Sin tipo de cambio oficial")
+      : traducir("{pct} % sobre el TCO Venta", { pct: fmtDif.format((brechaV / tco.venta) * 100) }));
 
     const brechaC = actual?.compra != null && tco?.compra != null ? actual.compra - tco.compra : null;
     texto("#banco-brecha-compra", brechaC == null ? "—" : fmtDif.format(brechaC));
-    texto("#banco-brecha-compra-pct", !banco.tieneCompra ? "La entidad no publica compra"
-      : brechaC == null ? "Sin tipo de cambio oficial" : `${fmtDif.format((brechaC / tco.compra) * 100)} % sobre el TCO Compra`);
+    texto("#banco-brecha-compra-pct", !banco.tieneCompra ? traducir("La entidad no publica compra")
+      : brechaC == null ? traducir("Sin tipo de cambio oficial") : traducir("{pct} % sobre el TCO Compra", { pct: fmtDif.format((brechaC / tco.compra) * 100) }));
 
     const spread = actual?.venta != null && actual?.compra != null ? actual.venta - actual.compra : null;
     texto("#banco-spread", spread == null ? "—" : fmtEje.format(spread));
-    texto("#banco-spread-pct", spread == null ? "La entidad no publica compra"
-      : `${fmtPct.format((spread / actual.compra) * 100)} % sobre el precio de compra`);
+    texto("#banco-spread-pct", spread == null ? traducir("La entidad no publica compra")
+      : traducir("{pct} % sobre el precio de compra", { pct: fmtPct.format((spread / actual.compra) * 100) }));
 
     const cambios = banco.puntos.filter((p, i) => i > 0 && p.t > t0 && p.t <= t1).length;
     texto("#banco-cambios", String(cambios));
@@ -270,7 +273,7 @@
       b.type = "button";
       b.dataset.serie = serie.id;
       b.setAttribute("aria-pressed", String(activas.has(serie.id)));
-      b.innerHTML = `<i class="swatch${serie.dash ? " dash" : ""} sw-${serie.clase}"></i>${serie.etiqueta}`;
+      b.innerHTML = `<i class="swatch${serie.dash ? " dash" : ""} sw-${serie.clase}"></i>${traducir(serie.etiqueta)}`;
       host.appendChild(b);
     });
     if (!banco || banco.tieneCompra) {
@@ -279,7 +282,7 @@
       s.className = "legend-icon";
       s.dataset.serie = "spread";
       s.setAttribute("aria-pressed", String(estado.lado === "spread"));
-      s.setAttribute("aria-label", "Comparar venta y compra de la entidad");
+      s.setAttribute("aria-label", traducir("Comparar venta y compra de la entidad"));
       s.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M3 8h18M3 16h18"></path><path d="M12 5v3M12 16v3"></path>
         <path d="M9.5 6.5L12 4l2.5 2.5M9.5 17.5L12 20l2.5-2.5"></path></svg>`;
@@ -408,13 +411,13 @@
       const serie = SERIES.find((z) => z.id === id);
       const v = valorEn(g.s[id], t);
       if (v == null) return;
-      filas.push(`<div class="tip-row"><span><i class="dot sw-${serie.clase}"></i>${serie.etiqueta}</span><b>Bs ${precio(v)}</b></div>`);
+      filas.push(`<div class="tip-row"><span><i class="dot sw-${serie.clase}"></i>${traducir(serie.etiqueta)}</span><b>Bs ${precio(v)}</b></div>`);
     });
     const va = valorEn(g.s[g.idA], t);
     const vb = valorEn(g.s[g.idB], t);
     if (va != null && vb != null && vb !== 0) {
       const dif = va - vb;
-      filas.push(`<div class="tip-row"><span>${estado.lado === "spread" ? "Spread" : "Brecha"}</span><b>Bs ${fmtEje.format(dif)} · ${fmtPct.format((dif / vb) * 100)} %</b></div>`);
+      filas.push(`<div class="tip-row"><span>${traducir(estado.lado === "spread" ? "Spread" : "Brecha")}</span><b>Bs ${fmtEje.format(dif)} · ${traducir("{n} %", { n: fmtPct.format((dif / vb) * 100) })}</b></div>`);
     }
     const tip = $b("#banco-tooltip");
     tip.innerHTML = `<h4>${fmtLargo.format(new Date(t))}</h4>${filas.join("")}`;
@@ -470,7 +473,7 @@
 
     const thead = document.createElement("thead");
     const cab = document.createElement("tr");
-    cab.innerHTML = "<th>Entidad</th>";
+    cab.innerHTML = `<th>${traducir("Entidad")}</th>`;
     dias.forEach((iso) => {
       const th = document.createElement("th");
       th.textContent = fmtDiaTabla.format(new Date(inicioDia(iso) + 12 * HORA));
@@ -481,7 +484,7 @@
     const tbody = document.createElement("tbody");
     const filaTco = document.createElement("tr");
     filaTco.className = "fila-tco";
-    filaTco.innerHTML = '<th scope="row">Oficial BCB (TCO)</th>';
+    filaTco.innerHTML = `<th scope="row">${traducir("Oficial BCB (TCO)")}</th>`;
     dias.forEach((iso) => filaTco.appendChild(celda(estado.tco.get(iso) || null, null, true)));
     tbody.appendChild(filaTco);
 
@@ -521,7 +524,7 @@
   function vistaBanco() {
     const banco = bancoActual();
     if (!banco) return;
-    texto("#banco-nombre", `${banco.largo} · USD / Bs.`);
+    texto("#banco-nombre", traducir("{banco} · USD / Bs.", { banco: banco.largo }));
     metricas(banco);
     leyenda();
     dibujar();
@@ -536,7 +539,7 @@
     }
     error.hidden = true;
     if (!estado.bancos.some((b) => b.nombre === estado.banco)) estado.banco = estado.bancos[0].nombre;
-    texto("#bancos-consulta", `Cotizaciones publicadas en el sitio web de cada entidad · última consulta ${fmtHora.format(new Date(estado.fin))}`);
+    texto("#bancos-consulta", traducir("Cotizaciones publicadas en el sitio web de cada entidad · última consulta {fecha}", { fecha: fmtHora.format(new Date(estado.fin)) }));
     selector();
     tabla();
     vistaBanco();
@@ -546,16 +549,15 @@
     if (estado.cargando) return;
     estado.cargando = true;
     try {
-      const [rb, rt] = await Promise.all([
-        fetch(`${URL_BANCOS}?v=${Date.now()}`, { cache: "no-store" }),
-        fetch(`${URL_TCO}?v=${Date.now()}`, { cache: "no-store" }).catch(() => null),
+      const [textoBancos, textoTco] = await Promise.all([
+        cargarDatos("bancos", [], "texto"),
+        cargarDatos("tco", [], "texto").catch(() => null),
       ]);
-      if (!rb.ok) throw new Error("No se pudo cargar el CSV de bancos");
-      const datos = leerBancos(await rb.text());
+      const datos = leerBancos(textoBancos);
       estado.bancos = datos.bancos;
       estado.fin = datos.fin;
       estado.inicio = datos.inicio;
-      estado.tco = rt && rt.ok ? leerTco(await rt.text()) : new Map();
+      estado.tco = textoTco != null ? leerTco(textoTco) : new Map();
       pintar();
     } catch (error) {
       $b("#bancos-error").hidden = false;
@@ -635,6 +637,12 @@
     window.addEventListener("resize", () => {
       clearTimeout(espera);
       espera = setTimeout(dibujar, 160);
+    });
+
+    addEventListener("idiomachange", () => {
+      prepararFormatos();
+      ocultarTip();
+      if (estado.bancos.length && estado.fin != null) pintar();
     });
 
     $b("#refresh-btn")?.addEventListener("click", cargar);
