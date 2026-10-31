@@ -1,6 +1,6 @@
 const diccionario = { en: {
   "Mercado cambiario · Bolivia": "Foreign exchange market · Bolivia",
-  "Precio y volumen P2P de USDT y USDC en Binance, Bybit y Bitget, expresados en bolivianos, frente al tipo de cambio oficial y las cotizaciones de los bancos.": "P2P price and volume of USDT and USDC on Binance, Bybit and Bitget, in bolivianos, compared with the official exchange rate and bank quotes.",
+  "Precio P2P de USDT y USDC en Binance, Bybit y Bitget, expresado en bolivianos, frente al tipo de cambio oficial y las cotizaciones de los bancos.": "P2P price of USDT and USDC on Binance, Bybit and Bitget, in bolivianos, compared with the official exchange rate and bank quotes.",
   "Inicio": "Home",
   "Secciones": "Sections",
   "Idioma": "Language",
@@ -11,7 +11,7 @@ const diccionario = { en: {
   "Reservas": "Reserves",
   "Noticias": "News",
   "Mercado cambiario": "Foreign exchange market",
-  "El dólar en Bolivia más allá del tipo de cambio oficial: el precio y el volumen P2P de USDT y USDC en Binance, Bybit y Bitget, observados <b>cada 5 minutos</b>, frente al oficial del Banco Central y las cotizaciones de los bancos.": "The dollar in Bolivia beyond the official exchange rate: the P2P price and volume of USDT and USDC on Binance, Bybit and Bitget, observed <b>every 5 minutes</b>, compared with the Central Bank's official rate and bank quotes.",
+  "El dólar en Bolivia más allá del tipo de cambio oficial: el precio P2P de USDT y USDC en Binance, Bybit y Bitget, observado <b>cada 5 minutos</b>, frente al oficial del Banco Central y las cotizaciones de los bancos.": "The dollar in Bolivia beyond the official exchange rate: the P2P price of USDT and USDC on Binance, Bybit and Bitget, observed <b>every 5 minutes</b>, compared with the Central Bank's official rate and bank quotes.",
   "P2P Venta · USDT": "P2P Sell · USDT",
   "P2P Compra · USDT": "P2P Buy · USDT",
   "P2P Venta frente al TCO": "P2P Sell vs. TCO",
