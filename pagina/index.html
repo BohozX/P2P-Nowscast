@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/styles.css?v=2">
+    <link rel="stylesheet" href="assets/styles.css?v=3">
   </head>
   <body>
     <header class="nav">
@@ -26,11 +26,11 @@
         </a>
         <nav class="nav-links" aria-label="Secciones" data-i18n-aria="Secciones">
           <a href="#p2p" data-i18n="Mercado P2P">Mercado P2P</a>
+          <a href="#noticias" data-i18n="Noticias">Noticias</a>
           <a href="#observado" data-i18n="Observado">Observado</a>
           <a href="#bancos" data-i18n="Bancos">Bancos</a>
           <a href="#operaciones" data-i18n="Operaciones">Operaciones</a>
           <a href="#reservas" data-i18n="Reservas">Reservas</a>
-          <a href="#noticias" data-i18n="Noticias">Noticias</a>
         </nav>
         <div class="idioma" id="idioma" role="group" aria-label="Idioma" data-i18n-aria="Idioma"><button type="button" data-l="en" aria-pressed="false">EN</button><button type="button" data-l="es" aria-pressed="true">ES</button></div>
         <a class="btn" href="#p2p"><span class="largo">P2P Nowcast Bolivia</span><span class="corto">P2P</span></a>
@@ -57,14 +57,14 @@
             <em id="c-compra-nota"></em>
           </article>
           <article class="cifra">
-            <span data-i18n="Oficial · Venta">Oficial · Venta</span>
+            <span data-i18n="TCO">TCO</span>
             <strong id="c-oficial">—</strong>
             <em id="c-oficial-nota"></em>
           </article>
           <article class="cifra">
-            <span data-i18n="Brecha · Venta">Brecha · Venta</span>
+            <span data-i18n="Brecha">Brecha</span>
             <strong id="c-brecha">—</strong>
-            <em data-i18n="P2P frente al oficial">P2P frente al oficial</em>
+            <em data-i18n="P2P Venta frente al TCO">P2P Venta frente al TCO</em>
           </article>
         </section>
       </div>
@@ -83,6 +83,7 @@
               <button class="active" type="button" data-asset="USDT" aria-pressed="true">USDT</button>
               <button type="button" data-asset="USDC" aria-pressed="false">USDC</button>
             </div>
+            <div class="campo"><span class="etq" data-i18n="Plataforma">Plataforma</span><div class="sel" id="plataforma-sel"></div></div>
           </div>
           <p class="captura" id="data-status">
             <i></i><span id="data-status-text">Cargando</span><span id="status-rel"></span>
@@ -102,41 +103,43 @@
               <strong id="metric-price-compra">—</strong>
               <span class="delta" id="delta-compra">—</span>
             </article>
-            <article class="metrica">
-              <span class="metric-title" data-i18n="TCO Venta · Bs.">TCO Venta · Bs.<em class="stamp" id="metric-tco-venta-stamp"></em></span>
-              <strong id="metric-tco-venta">—</strong>
-              <span class="metric-note" id="metric-tco-venta-note">Banco Central de Bolivia</span>
+            <article class="metrica" id="metric-bancos" tabindex="0">
+              <span class="metric-title" data-i18n="Bancos · Venta · Bs.">Bancos · Venta · Bs.<em class="stamp" id="metric-bancos-stamp"></em></span>
+              <strong id="metric-bancos-mediana">—</strong>
+              <span class="metric-note"><span class="linea" id="metric-bancos-de"></span><span class="linea" id="metric-bancos-media"></span></span>
             </article>
             <article class="metrica">
-              <span class="metric-title" data-i18n="TCO Compra · Bs.">TCO Compra · Bs.<em class="stamp" id="metric-tco-compra-stamp"></em></span>
-              <strong id="metric-tco-compra">—</strong>
-              <span class="metric-note" id="metric-tco-compra-note">Banco Central de Bolivia</span>
+              <span class="metric-title" data-i18n="TCO · Bs.">TCO · Bs.<em class="stamp" id="metric-tco-stamp"></em></span>
+              <strong id="metric-tco">—</strong>
+              <span class="metric-note" id="metric-tco-note">Banco Central de Bolivia</span>
             </article>
           </div>
           <div class="metricas segunda" aria-live="polite">
             <article class="metrica">
               <span class="metric-title" id="metric-gap-title">Brecha Venta · Bs.</span>
               <strong id="metric-gap">—</strong>
-              <span class="metric-note" id="metric-gap-pct">P2P frente al tipo de cambio oficial</span>
+              <span class="metric-note" id="metric-gap-pct">P2P frente al TCO</span>
             </article>
             <article class="metrica">
               <span class="metric-title" data-i18n="Spread P2P · Bs.">Spread P2P · Bs.</span>
               <strong id="metric-spread">—</strong>
               <span class="metric-note" id="metric-spread-pct">Sin precios en el rango</span>
             </article>
-            <article class="metrica">
-              <span class="metric-title" data-i18n="Volumen estimado ·">Volumen estimado · <span id="volume-unit">USDT</span></span>
+            <article class="metrica reparto sin-reparto" id="reparto-volume" tabindex="0">
+              <span class="metric-title" data-i18n="Volumen estimado">Volumen estimado</span>
               <div class="metric-pair">
                 <div class="metric-side venta"><small data-i18n="Venta"><i></i>Venta</small><strong id="metric-volume-venta">—</strong></div>
                 <div class="metric-side compra"><small data-i18n="Compra"><i></i>Compra</small><strong id="metric-volume-compra">—</strong></div>
               </div>
+              <div class="barra-reparto" aria-hidden="true"><i class="venta" id="barra-volume-venta"></i><i class="compra" id="barra-volume-compra"></i></div>
             </article>
-            <article class="metrica">
+            <article class="metrica reparto sin-reparto" id="reparto-transactions" tabindex="0">
               <span class="metric-title" data-i18n="Transacciones estimadas">Transacciones estimadas</span>
               <div class="metric-pair">
                 <div class="metric-side venta"><small data-i18n="Venta"><i></i>Venta</small><strong id="metric-transactions-venta">—</strong></div>
                 <div class="metric-side compra"><small data-i18n="Compra"><i></i>Compra</small><strong id="metric-transactions-compra">—</strong></div>
               </div>
+              <div class="barra-reparto" aria-hidden="true"><i class="venta" id="barra-transactions-venta"></i><i class="compra" id="barra-transactions-compra"></i></div>
             </article>
           </div>
 
@@ -154,7 +157,7 @@
             </div>
             <div class="legend" id="legend" aria-label="Series del gráfico" data-i18n-aria="Series del gráfico"></div>
             <div class="chart-wrap" id="chart-wrap">
-              <svg id="market-chart" role="img" aria-label="Precio P2P de compra y venta, tipo de cambio oficial y volumen estimado" data-i18n-aria="Precio P2P de compra y venta, tipo de cambio oficial y volumen estimado"></svg>
+              <svg id="market-chart" role="img" aria-label="Precio P2P de compra y venta, TCO y actividad relativa" data-i18n-aria="Precio P2P de compra y venta, TCO y actividad relativa"></svg>
               <div class="chart-tooltip" id="chart-tooltip" hidden></div>
               <div class="chart-skeleton" id="chart-skeleton" hidden aria-hidden="true"><span></span><span></span><span></span></div>
               <div class="chart-state" id="empty-state" hidden>
@@ -179,14 +182,14 @@
                 </div>
               </div>
             </div>
-            <div class="ranking-cab"><span data-i18n="Plataforma">Plataforma</span><span data-i18n="Volumen">Volumen</span><span data-i18n="Precio ponderado">Precio ponderado</span><span data-i18n="Participación">Participación</span></div>
-            <ol class="ranking" id="pl-ranking"></ol>
+            <div class="ranking-cab tres"><span data-i18n="Plataforma">Plataforma</span><span data-i18n="Volumen">Volumen</span><span data-i18n="Transacciones">Transacciones</span></div>
+            <ol class="ranking tres" id="pl-ranking"></ol>
             <div class="legend estatica" id="pl-leyenda"></div>
             <div class="chart-wrap no-volume" id="pl-wrap">
-              <svg class="grafico-linea" id="pl-chart" role="img" aria-label="Volumen diario por plataforma" data-i18n-aria="Volumen diario por plataforma"></svg>
+              <svg class="grafico-linea" id="pl-chart" role="img" aria-label="Participación diaria por plataforma" data-i18n-aria="Participación diaria por plataforma"></svg>
               <div class="chart-tooltip" id="pl-tip" hidden></div>
             </div>
-            <p class="aviso-error" id="pl-error" hidden data-i18n="No fue posible cargar el volumen por plataforma.">No fue posible cargar el volumen por plataforma.</p>
+            <p class="aviso-error" id="pl-error" hidden data-i18n="No fue posible cargar la participación por plataforma.">No fue posible cargar la participación por plataforma.</p>
           </section>
 
           <details class="metodologia">
@@ -194,11 +197,17 @@
             <div class="cuerpo">
               <p data-i18n="P2P Nowcast monitorea de forma periódica los anuncios disponibles en mercados P2P y sigue su evolución en el tiempo. A partir de anuncios comparables y de cambios observados en las cantidades ofertadas, el sistema estima la actividad transaccional del mercado y los precios a los que esta actividad estaría ocurriendo.">P2P Nowcast monitorea de forma periódica los anuncios disponibles en mercados P2P y sigue su evolución en el tiempo. A partir de anuncios comparables y de cambios observados en las cantidades ofertadas, el sistema estima la actividad transaccional del mercado y los precios a los que esta actividad estaría ocurriendo.</p>
               <p data-i18n="Los resultados corresponden a estimaciones construidas a partir de información pública de los anuncios y no a registros directos de transacciones ejecutadas. Para mejorar su representatividad, únicamente se consideran observaciones que cumplen criterios internos de consistencia y comparabilidad.">Los resultados corresponden a estimaciones construidas a partir de información pública de los anuncios y no a registros directos de transacciones ejecutadas. Para mejorar su representatividad, únicamente se consideran observaciones que cumplen criterios internos de consistencia y comparabilidad.</p>
-              <p class="nota" data-i18n="El tipo de cambio oficial se toma tal como lo publica el Banco Central de Bolivia.">El tipo de cambio oficial se toma tal como lo publica el Banco Central de Bolivia.</p>
+              <p class="nota" data-i18n="El TCO se toma tal como lo publica el Banco Central de Bolivia.">El TCO se toma tal como lo publica el Banco Central de Bolivia.</p>
             </div>
           </details>
 
           <p class="fuente" data-i18n="Fuente: Binance P2P, Bybit P2P y Bitget P2P · Banco Central de Bolivia">Fuente: Binance P2P, Bybit P2P y Bitget P2P · Banco Central de Bolivia</p>
+        </div>
+      </section>
+
+      <section id="noticias">
+        <div class="titulares" id="titulares" aria-label="Últimos titulares" data-i18n-aria="Últimos titulares">
+          <div class="titulares-pista" id="titulares-pista"></div>
         </div>
       </section>
 
@@ -298,13 +307,25 @@
             <h2 class="grad" data-i18n="Tipo de cambio en bancos">Tipo de cambio en bancos</h2>
           </div>
 
-          <div class="selector-centro">
-            <div class="chips" id="bancos-selector" role="group" aria-label="Seleccionar entidad financiera" data-i18n-aria="Seleccionar entidad financiera"></div>
-          </div>
           <p class="captura" id="bancos-consulta"></p>
           <p class="aviso-error" id="bancos-error" hidden data-i18n="No fue posible obtener las cotizaciones de las entidades financieras.">No fue posible obtener las cotizaciones de las entidades financieras.</p>
 
-          <div class="metricas" aria-live="polite">
+          <section class="bloque pizarra" id="pizarra" hidden>
+            <div class="grafico-head">
+              <h3 data-i18n="La pizarra, ahora">La pizarra, ahora</h3>
+            </div>
+            <div class="pz-extremos">
+              <div class="pz-extremo barato"><span data-i18n="Más barato">Más barato</span><strong id="pz-barato">—</strong><em id="pz-barato-de"></em></div>
+              <div class="pz-extremo caro"><span data-i18n="Más caro">Más caro</span><strong id="pz-caro">—</strong><em id="pz-caro-de"></em></div>
+            </div>
+            <div class="pz-escala" id="pz-escala"></div>
+          </section>
+
+          <div class="selector-centro tras-bloque" id="bancos-campo">
+            <div class="campo campo-banco"><span class="etq" data-i18n="Entidad">Entidad</span><div class="sel" id="bancos-selector"></div></div>
+          </div>
+
+          <div class="metricas tres" aria-live="polite">
             <article class="metrica acento-venta">
               <span class="metric-title" data-i18n="Banco Venta · Bs.">Banco Venta · Bs.</span>
               <strong id="banco-venta">—</strong>
@@ -316,13 +337,8 @@
               <span class="delta" id="banco-delta-compra">—</span>
             </article>
             <article class="metrica">
-              <span class="metric-title" data-i18n="TCO Venta · Bs.">TCO Venta · Bs.<em class="stamp" id="banco-tco-venta-stamp"></em></span>
-              <strong id="banco-tco-venta">—</strong>
-              <span class="metric-note">Banco Central de Bolivia</span>
-            </article>
-            <article class="metrica">
-              <span class="metric-title" data-i18n="TCO Compra · Bs.">TCO Compra · Bs.<em class="stamp" id="banco-tco-compra-stamp"></em></span>
-              <strong id="banco-tco-compra">—</strong>
+              <span class="metric-title" data-i18n="TCO · Bs.">TCO · Bs.<em class="stamp" id="banco-tco-stamp"></em></span>
+              <strong id="banco-tco">—</strong>
               <span class="metric-note">Banco Central de Bolivia</span>
             </article>
           </div>
@@ -362,7 +378,7 @@
             </div>
             <div class="legend" id="bancos-leyenda" aria-label="Series del gráfico de bancos" data-i18n-aria="Series del gráfico de bancos"></div>
             <div class="chart-wrap no-volume" id="banco-wrap">
-              <svg id="banco-chart" role="img" aria-label="Compra y venta de la entidad frente al tipo de cambio oficial" data-i18n-aria="Compra y venta de la entidad frente al tipo de cambio oficial"></svg>
+              <svg id="banco-chart" role="img" aria-label="Compra y venta de la entidad frente al TCO" data-i18n-aria="Compra y venta de la entidad frente al TCO"></svg>
               <div class="chart-tooltip" id="banco-tooltip" hidden></div>
               <div class="chart-state" id="bancos-vacio" hidden>
                 <strong data-i18n="Sin cotizaciones para este periodo">Sin cotizaciones para este periodo</strong>
@@ -516,49 +532,25 @@
             </div>
           </section>
 
-          <section class="bloque">
-            <div class="grafico-head">
-              <h3 data-i18n="Tipo de cambio paralelo según el BCB">Tipo de cambio paralelo según el BCB</h3>
-            </div>
-            <div class="legend estatica">
-              <span data-i18n="Tipo de cambio paralelo"><i class="swatch" style="background:var(--verde)"></i>Tipo de cambio paralelo</span>
-              <span data-i18n="Valor referencial del dólar"><i class="swatch" style="background:var(--celeste)"></i>Valor referencial del dólar</span>
-              <span data-i18n="TCO"><i class="swatch dash" style="color:var(--tco)"></i>TCO</span>
-              <span data-i18n="Oficial fijo"><i class="swatch dash" style="color:var(--tco-2)"></i>Oficial fijo</span>
-            </div>
-            <div class="chart-wrap no-volume" id="pb-wrap">
-              <svg class="grafico-linea" id="pb-chart" role="img" aria-label="Tipo de cambio paralelo mensual publicado por el BCB" data-i18n-aria="Tipo de cambio paralelo mensual publicado por el BCB"></svg>
-              <div class="chart-tooltip" id="pb-tip" hidden></div>
-            </div>
-            <p class="fuente" id="pb-fuente"></p>
-          </section>
-
           <p class="aviso-error" id="rv-error" hidden data-i18n="No fue posible cargar los datos del BCB.">No fue posible cargar los datos del BCB.</p>
           <p class="fuente" data-i18n="Fuente: Banco Central de Bolivia, Estadísticas Semanales y Reservas Internacionales Netas por componentes">Fuente: Banco Central de Bolivia, Estadísticas Semanales y Reservas Internacionales Netas por componentes</p>
-        </div>
-      </section>
-
-      <section class="sec" id="noticias">
-        <div class="env">
-          <div class="titulares" id="titulares" aria-label="Últimos titulares" data-i18n-aria="Últimos titulares">
-            <div class="titulares-pista" id="titulares-pista"></div>
-          </div>
         </div>
       </section>
     </main>
 
     <div class="tip-bubble" id="tip-bubble" hidden></div>
 
-    <script src="assets/rutas.js?v=1" defer></script>
-    <script src="assets/idioma.js?v=3" defer></script>
-    <script src="assets/app.js?v=2" defer></script>
-    <script src="assets/bancos.js?v=2" defer></script>
-    <script src="assets/portada.js?v=2" defer></script>
+    <script src="assets/rutas.js?v=2" defer></script>
+    <script src="assets/idioma.js?v=4" defer></script>
+    <script src="assets/desplegable.js?v=1" defer></script>
+    <script src="assets/app.js?v=3" defer></script>
+    <script src="assets/bancos.js?v=3" defer></script>
+    <script src="assets/portada.js?v=3" defer></script>
     <script src="assets/operaciones.js?v=2" defer></script>
     <script src="assets/observado.js?v=2" defer></script>
-    <script src="assets/plataformas.js?v=3" defer></script>
-    <script src="assets/graficos.js?v=1" defer></script>
-    <script src="assets/bcb.js?v=2" defer></script>
+    <script src="assets/plataformas.js?v=4" defer></script>
+    <script src="assets/graficos.js?v=2" defer></script>
+    <script src="assets/bcb.js?v=3" defer></script>
     <script src="assets/noticias.js?v=3" defer></script>
     <script src="assets/historico.js?v=1" defer></script>
     <script data-goatcounter="https://bohozx.goatcounter.com/count" async src="/assets/goatcounter.js"></script>

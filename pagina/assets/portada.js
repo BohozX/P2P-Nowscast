@@ -270,12 +270,12 @@
   function leerOficial(texto) {
     const lineas = texto.trim().split(/\r?\n/);
     const cab = lineas[0].split(",").map((s) => s.trim());
-    const iV = cab.indexOf("vigencia"), iC = cab.indexOf("tco_compra"), iVe = cab.indexOf("tco_venta");
+    const iV = cab.indexOf("vigencia"), iC = cab.indexOf("tco_compra");
     const mapa = new Map();
     lineas.slice(1).forEach((l) => {
       const x = l.split(",");
       const v = (x[iV] || "").trim();
-      if (v) mapa.set(v, { compra: x[iC] === "" ? null : Number(x[iC]), venta: x[iVe] === "" ? null : Number(x[iVe]) });
+      if (v) mapa.set(v, x[iC] === "" ? null : Number(x[iC]));
     });
     return mapa;
   }
@@ -296,11 +296,11 @@
     poner("c-compra-nota", nota(q));
     const fechas = oficial ? [...oficial.keys()].filter((f) => f <= hoy).sort() : [];
     const vig = fechas.length ? oficial.get(fechas.at(-1)) : null;
-    poner("c-oficial", vig && vig.venta != null ? precio.format(vig.venta) : "—");
-    poner("c-oficial-nota", vig ? traducir("BCB · vigente {fecha}", { fecha: rotulo(fechas.at(-1)) }) : "");
+    poner("c-oficial", vig != null ? precio.format(vig) : "—");
+    poner("c-oficial-nota", vig != null ? traducir("BCB · vigente {fecha}", { fecha: rotulo(fechas.at(-1)) }) : "");
     const brecha = document.getElementById("c-brecha");
-    if (brecha && v && vig && vig.venta) {
-      brecha.textContent = signo.format(((v.vwap_bob - vig.venta) / vig.venta) * 100);
+    if (brecha && v && vig) {
+      brecha.textContent = signo.format(((v.vwap_bob - vig) / vig) * 100);
       const pct = document.createElement("small");
       pct.textContent = "%";
       brecha.append(pct);
@@ -313,7 +313,7 @@
       const q = compra.get(p.timestamp_utc);
       const o = oficialDe(oficial, p.timestamp_bo.slice(0, 10));
       return {
-        venta: p.vwap_bob ?? null, compra: q ? q.vwap_bob ?? null : null, oficial: o ? o.venta : null,
+        venta: p.vwap_bob ?? null, compra: q ? q.vwap_bob ?? null : null, oficial: o ?? null,
       };
     });
     if (puntos.length < 2) return null;

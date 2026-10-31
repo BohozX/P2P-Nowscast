@@ -59,35 +59,6 @@
     svg.addEventListener("pointerleave", () => { tipEl.hidden = true; vistos.get(svg)?.cursor.setAttribute("visibility", "hidden"); });
   }
 
-  function lineas(svg, { etiquetas, series, etiquetaY, wrap, tipEl, contenido, puntos = false }) {
-    const { ancho, alto, pad } = preparar(svg);
-    const valores = series.flatMap((s) => s.valores).filter((v) => v != null);
-    if (!valores.length) return;
-    let lo = Math.min(...valores), hi = Math.max(...valores);
-    const m = (hi - lo || Math.abs(hi) * .05 || 1) * .12; lo -= m; hi += m;
-    const n = etiquetas.length;
-    const xs = etiquetas.map((_, i) => pad.l + (i / Math.max(1, n - 1)) * (ancho - pad.l - pad.r));
-    const y = (v) => (alto - pad.b) - ((v - lo) / (hi - lo)) * (alto - pad.b - pad.t);
-    ejes(svg, ancho, alto, pad, lo, hi, y, etiquetaY);
-    [...series].reverse().forEach((s) => {
-      let d = "", abierto = false;
-      s.valores.forEach((v, i) => {
-        if (v == null) { abierto = false; return; }
-        d += `${abierto ? "L" : "M"}${xs[i].toFixed(1)} ${y(v).toFixed(1)} `;
-        abierto = true;
-      });
-      if (d) nodo("path", { d, fill: "none", stroke: s.color, "stroke-width": s.ancho || 2, "stroke-linejoin": "round", "stroke-linecap": "round", ...(s.raya ? { "stroke-dasharray": s.raya } : {}) }, svg);
-      if (puntos && !s.raya) {
-        const g = nodo("g", { fill: s.color }, svg);
-        s.valores.forEach((v, i) => { if (v != null) nodo("circle", { cx: xs[i].toFixed(1), cy: y(v).toFixed(1), r: n > 120 ? 1.2 : 2.2 }, g); });
-      }
-    });
-    rotulosX(svg, ancho, alto, xs, etiquetas);
-    const cursor = nodo("line", { x1: 0, x2: 0, y1: pad.t - 6, y2: alto - pad.b, stroke: "rgba(255,255,255,.3)", "stroke-dasharray": "3 3", visibility: "hidden" }, svg);
-    vistos.set(svg, { ...(vistos.get(svg) || {}), ancho, cursor });
-    if (tipEl) enlazar(svg, wrap, tipEl, xs, contenido);
-  }
-
   function barras(svg, { etiquetas, valores, color, etiquetaY, wrap, tipEl, contenido }) {
     const { ancho, alto, pad } = preparar(svg);
     const n = etiquetas.length;
@@ -99,7 +70,7 @@
     const paso = (ancho - pad.l - pad.r) / n;
     const xs = etiquetas.map((_, i) => pad.l + paso * (i + .5));
     const anchoB = Math.max(1.5, Math.min(26, paso * .66));
-    const g = nodo("g", { fill: color, opacity: .8 }, svg);
+    const g = nodo("g", { fill: color, opacity: .9 }, svg);
     valores.forEach((v, i) => { if (v) nodo("rect", { x: (xs[i] - anchoB / 2).toFixed(1), y: y(v).toFixed(1), width: anchoB.toFixed(1), height: Math.max(1, base - y(v)).toFixed(1), rx: Math.min(2, anchoB / 3) }, g); });
     rotulosX(svg, ancho, alto, xs, etiquetas);
     const cursor = nodo("line", { x1: 0, x2: 0, y1: pad.t - 6, y2: base, stroke: "rgba(255,255,255,.3)", "stroke-dasharray": "3 3", visibility: "hidden" }, svg);
@@ -107,5 +78,5 @@
     if (tipEl) enlazar(svg, wrap, tipEl, xs, contenido);
   }
 
-  window.MCGraficos = { lineas, barras };
+  window.MCGraficos = { barras };
 })();

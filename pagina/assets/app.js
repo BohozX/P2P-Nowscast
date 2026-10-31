@@ -3,21 +3,17 @@
    los valores P2P se muestran tal como llegan en los JSON publicos y el tipo de
    cambio oficial tal como lo publica el CSV diario de TCO-BCB. */
 
-/* Resoluciones que publica el sistema tal cual. */
-const BASE_FREQUENCIES = {
-  USDT: ["5m", "1h", "1d"],
-  USDC: ["1h", "1d"],
+const FRECUENCIAS = {
+  total: { USDT: ["5m", "15m", "30m", "1h", "4h", "1d"], USDC: ["1h", "4h", "1d"] },
+  plataforma: { USDT: ["5m", "15m", "1h", "1d"], USDC: ["1h", "1d"] },
 };
 
-/* Resoluciones derivadas: se arman agrupando los puntos que ya llegan en el JSON.
-   El precio de cada bloque es la suma de volume_bob dividida por la suma de
-   volume_asset, es decir el mismo promedio ponderado que trae la fuente, no un
-   promedio simple ni un valor inventado. */
-const DERIVED = {
-  "15m": { base: "5m", ms: 15 * 60_000 },
-  "30m": { base: "5m", ms: 30 * 60_000 },
-  "4h": { base: "1h", ms: 4 * 3_600_000 },
-};
+const PLATAFORMAS_P2P = [
+  { id: "total", nombre: "Mercado total" },
+  { id: "binance", nombre: "Binance", color: "var(--verde)" },
+  { id: "bybit", nombre: "Bybit", color: "var(--celeste)" },
+  { id: "bitget", nombre: "Bitget", color: "#b9b4ff" },
+];
 
 const allowedRanges = [1, 7, 30];
 
@@ -29,8 +25,6 @@ const FREQ_OPTIONS = [
   { id: "4h", label: "4h" },
   { id: "1d", label: "1D" },
 ];
-
-const baseOf = (frequency) => DERIVED[frequency]?.base || frequency;
 
 /* Duracion de cada bloque. El dato se etiqueta con el FIN de su intervalo: lo que
    se ve como 08:15 en la frecuencia de 15 minutos es lo ocurrido antes de las 08:15. */
@@ -51,26 +45,28 @@ function instante(time) {
   return esDiaria() ? new Date(time) : new Date(time + (FREQ_MS[state.frequency] || 0));
 }
 
-function availableFrequencies(asset) {
-  return FREQ_OPTIONS
-    .filter((option) => BASE_FREQUENCIES[asset].includes(baseOf(option.id)))
-    .map((option) => option.id);
-}
-
 const state = {
   asset: "USDT",
+  platform: "total",
   frequency: "5m",
   rangeDays: 30,
   side: "venta",
-  showVolume: true,
+  showActivity: true,
   rows: [],
   tco: new Map(),
+  participacion: null,
   asOf: null,
   loading: false,
   token: 0,
   estado: null,
   error: null,
 };
+
+const esPlataforma = () => state.platform !== "total";
+
+function availableFrequencies(asset) {
+  return FRECUENCIAS[esPlataforma() ? "plataforma" : "total"][asset];
+}
 
 // El dato conserva su clave contractual. La etiqueta se muestra desde la
 // perspectiva del comerciante: BUY -> Venta y SELL -> Compra.
@@ -79,28 +75,21 @@ const displaySides = [
   { key: "SELL", path: "venta", label: "Compra", slug: "compra" },
 ];
 
-/* El color se toma de las variables CSS para que el tema del activo mande:
-   verde para USDT, celeste para USDC. */
 const SERIES = [
-  { id: "p2pVenta", label: "P2P Venta", tone: "--green", width: 2.4, dash: "", side: "venta" },
-  { id: "p2pCompra", label: "P2P Compra", tone: "--cyan", width: 2.4, dash: "", side: "compra" },
-  { id: "tcoVenta", label: "TCO Venta", tone: "--tco", width: 1.8, dash: "7 4", side: "venta" },
-  { id: "tcoCompra", label: "TCO Compra", tone: "--tco-2", width: 1.8, dash: "2 4", side: "compra" },
+  { id: "p2pVenta", label: "P2P Venta", width: 2.4, dash: "", side: "venta" },
+  { id: "p2pCompra", label: "P2P Compra", width: 2.4, dash: "", side: "compra" },
+  { id: "tco", label: "TCO", width: 1.8, dash: "7 4", side: null },
 ];
 
-/* El grafico muestra un lado a la vez: el precio P2P y el tipo de cambio oficial
-   que le corresponde, con la distancia entre ambos sombreada. */
 const SIDE_VIEW = {
-  venta: { p2p: "p2pVenta", tco: "tcoVenta" },
-  compra: { p2p: "p2pCompra", tco: "tcoCompra" },
-  /* Modo spread: compara los dos precios P2P entre si, sin el oficial. */
+  venta: { p2p: "p2pVenta", tco: "tco" },
+  compra: { p2p: "p2pCompra", tco: "tco" },
   spread: { p2p: "p2pVenta", tco: "p2pCompra" },
 };
 
 /* Un bloque sin operaciones no tiene precio propio. Para que la linea no quede
    partida se arrastra el ultimo precio conocido: el mercado siguio en ese nivel
-   porque nadie opero. Solo afecta al dibujo; el volumen de ese bloque sigue
-   siendo cero y el tooltip lo dice. */
+   porque nadie opero. Solo afecta al dibujo. */
 function arrastrarPrecios(points, claves) {
   const ultimo = {};
   points.forEach((point) => {
@@ -123,26 +112,24 @@ function palette() {
   return {
     p2pVenta: read("--green", "#35e08b"),
     p2pCompra: read("--cyan", "#46c8ea"),
-    tcoVenta: read("--tco", "#d7e2dd"),
-    tcoCompra: read("--tco-2", "#8aa39a"),
+    tco: read("--tco", "#d7e2dd"),
     grid: read("--grid-line", "rgba(126,231,178,.07)"),
     panel: read("--bg-2", "#071613"),
   };
 }
 
-function sideSeries() {
-  if (state.side === "spread") {
-    return SERIES.filter((serie) => serie.id === "p2pVenta" || serie.id === "p2pCompra");
-  }
-  return SERIES.filter((serie) => serie.side === state.side);
-}
-
 const enSpread = () => state.side === "spread";
+
+function sideSeries() {
+  if (enSpread()) return SERIES.filter((serie) => serie.side);
+  return SERIES.filter((serie) => serie.side === state.side || !serie.side);
+}
 
 const timeZone = "America/La_Paz";
 let priceFormat;
 let tcoFormat;
 let percentFormat;
+let diferenciaFormat;
 let fullDateFormat;
 let shortDateFormat;
 let dayFormat;
@@ -161,6 +148,11 @@ function prepararFormatos() {
   percentFormat = new Intl.NumberFormat(regional, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+  });
+  diferenciaFormat = new Intl.NumberFormat(regional, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    signDisplay: "exceptZero",
   });
   fullDateFormat = new Intl.DateTimeFormat(regional, {
     timeZone, day: "2-digit", month: "short", year: "numeric",
@@ -197,22 +189,24 @@ function restorePreferences() {
   } catch (error) {
     saved = {};
   }
-  if (Object.hasOwn(BASE_FREQUENCIES, saved.asset)) state.asset = saved.asset;
+  if (Object.hasOwn(FRECUENCIAS.total, saved.asset)) state.asset = saved.asset;
+  if (PLATAFORMAS_P2P.some((p) => p.id === saved.platform)) state.platform = saved.platform;
   const disponibles = availableFrequencies(state.asset);
   state.frequency = disponibles.includes(saved.frequency) ? saved.frequency : disponibles[0];
   if (allowedRanges.includes(saved.rangeDays)) state.rangeDays = saved.rangeDays;
   if (Object.hasOwn(SIDE_VIEW, saved.side)) state.side = saved.side;
-  if (typeof saved.showVolume === "boolean") state.showVolume = saved.showVolume;
+  if (typeof saved.showActivity === "boolean") state.showActivity = saved.showActivity;
 }
 
 function savePreferences() {
   try {
     window.localStorage.setItem(STORE_KEY, JSON.stringify({
       asset: state.asset,
+      platform: state.platform,
       frequency: state.frequency,
       rangeDays: state.rangeDays,
       side: state.side,
-      showVolume: state.showVolume,
+      showActivity: state.showActivity,
     }));
   } catch (error) {
     /* almacenamiento no disponible */
@@ -221,44 +215,16 @@ function savePreferences() {
 
 /* ----------------------------------------------------------------- datos -- */
 
-/* Agrupa los puntos que ya llegan del JSON en bloques de mayor duracion.
-   Los volumenes se suman y el precio del bloque es sum(volume_bob)/sum(volume_asset),
-   que es exactamente el promedio ponderado de los puntos que lo componen. Un bloque
-   sin volumen queda sin precio, no se arrastra el anterior. */
-function aggregatePoints(points, ms) {
-  const buckets = new Map();
-  points.forEach((point) => {
-    const time = Date.parse(point.timestamp_utc);
-    if (!Number.isFinite(time)) return;
-    const key = Math.floor(time / ms) * ms;
-    let bucket = buckets.get(key);
-    if (!bucket) {
-      bucket = { asset: 0, bob: 0, events: 0, observed: false };
-      buckets.set(key, bucket);
-    }
-    bucket.asset += Number(point.volume_asset || 0);
-    bucket.bob += Number(point.volume_bob || 0);
-    bucket.events += Number(point.validated_events || 0);
-    bucket.observed = bucket.observed || Boolean(point.price_observed);
-  });
-
-  return [...buckets.entries()].sort((a, b) => a[0] - b[0]).map(([key, bucket]) => ({
-    timestamp_utc: new Date(key).toISOString().replace(".000Z", "Z"),
-    timestamp_bo: `${new Date(key - 4 * 3_600_000).toISOString().slice(0, 19)}-04:00`,
-    vwap_bob: bucket.asset > 0 ? bucket.bob / bucket.asset : null,
-    volume_asset: bucket.asset,
-    volume_bob: bucket.bob,
-    validated_events: bucket.events,
-    price_observed: bucket.observed,
-  }));
-}
-
-async function loadSeries(asset, side, frequency) {
-  const base = baseOf(frequency);
-  const key = `${asset}/${side.path}/${base}`;
+async function loadSeries(asset, platform, side, frequency) {
+  const total = platform === "total";
+  const key = total
+    ? `${asset}/${side.path}/${frequency}`
+    : `${asset}/${side.path}/plataformas/${platform}/${frequency}`;
   let payload;
   try {
-    payload = await cargarDatos("p2p", [asset, side.path, base]);
+    payload = total
+      ? await cargarDatos("p2p", [asset, side.path, frequency])
+      : await cargarDatos("plataforma", [asset, side.path, platform, frequency]);
   } catch (error) {
     if (error.estado) throw Object.assign(new Error(key), { clave: "No se pudo cargar {clave}", valores: { clave: key } });
     throw error;
@@ -267,53 +233,47 @@ async function loadSeries(asset, side, frequency) {
     payload.window_days !== 30
     || payload.asset !== asset
     || payload.side !== side.key
-    || payload.frequency !== base
+    || payload.frequency !== frequency
+    || (!total && payload.platform !== platform)
   ) {
     throw Object.assign(new Error(key), { clave: "El archivo público no cumple el contrato esperado" });
-  }
-  if (DERIVED[frequency]) {
-    payload.points = aggregatePoints(payload.points || [], DERIVED[frequency].ms);
   }
   return payload;
 }
 
-async function loadMarket(asset, frequency) {
+async function loadMarket(asset, platform, frequency) {
   const payloads = await Promise.all(
-    displaySides.map((side) => loadSeries(asset, side, frequency)),
+    displaySides.map((side) => loadSeries(asset, platform, side, frequency)),
   );
   return Object.fromEntries(displaySides.map((side, index) => [side.key, payloads[index]]));
 }
 
-/* El CSV se consume tal cual: una fila por fecha de vigencia con los valores de
-   compra y venta ya publicados. No se interpola ni se arrastra ningun valor. */
+async function loadParticipacion(asset) {
+  const payload = await cargarDatos("participacion", [asset]);
+  return payload.asset === asset ? payload : null;
+}
+
+/* El CSV se consume tal cual: una fila por fecha de vigencia con el valor ya
+   publicado. No se interpola ni se arrastra ningun valor. */
 async function loadTco() {
   const text = await cargarDatos("tco", [], "texto");
   const lines = text.trim().split(/\r?\n/);
   const header = lines[0].split(",").map((item) => item.trim());
   const iVig = header.indexOf("vigencia");
-  const iCompra = header.indexOf("tco_compra");
-  const iVenta = header.indexOf("tco_venta");
-  if (iVig < 0 || iCompra < 0 || iVenta < 0) {
+  const iTco = header.indexOf("tco_compra");
+  if (iVig < 0 || iTco < 0) {
     throw new Error("El CSV oficial no tiene las columnas esperadas");
   }
 
   const map = new Map();
-  let latest = null;
   lines.slice(1).forEach((line) => {
     const cells = line.split(",");
     const vigencia = (cells[iVig] || "").trim();
     if (!vigencia) return;
-    const compra = (cells[iCompra] || "").trim();
-    const venta = (cells[iVenta] || "").trim();
-    const entry = {
-      vigencia,
-      compra: compra === "" ? null : Number(compra),
-      venta: venta === "" ? null : Number(venta),
-    };
-    map.set(vigencia, entry);
-    if (!latest || vigencia > latest.vigencia) latest = entry;
+    const valor = (cells[iTco] || "").trim();
+    map.set(vigencia, { vigencia, tco: valor === "" ? null : Number(valor) });
   });
-  return { map, latest };
+  return { map };
 }
 
 function buildRows(market, rangeDays) {
@@ -340,19 +300,14 @@ function buildRows(market, rangeDays) {
   );
   const firstUseful = rows.findIndex((row) => displaySides.some((side) => {
     const point = row.sides[side.key];
-    return point && (
-      point.vwap_bob != null
-      || Number(point.volume_asset || 0) > 0
-      || Number(point.validated_events || 0) > 0
-    );
+    return point && (point.vwap_bob != null || Number(point.activity || 0) > 0);
   }));
 
   return firstUseful < 0 ? [] : rows.slice(firstUseful);
 }
 
 function summarizeSide(rows, side) {
-  const points = rows.map((row) => row.sides[side.key]).filter(Boolean);
-  const priced = points.filter((point) => point.vwap_bob != null);
+  const priced = rows.map((row) => row.sides[side.key]).filter((point) => point && point.vwap_bob != null);
   const first = priced.at(0)?.vwap_bob;
   const last = priced.at(-1)?.vwap_bob;
   return {
@@ -360,11 +315,6 @@ function summarizeSide(rows, side) {
     change: first != null && last != null && Number(first) !== 0
       ? ((Number(last) - Number(first)) / Number(first)) * 100
       : null,
-    volume: points.reduce((sum, point) => sum + Number(point.volume_asset || 0), 0),
-    transactions: points.reduce(
-      (sum, point) => sum + Number(point.validated_events || 0),
-      0,
-    ),
   };
 }
 
@@ -383,11 +333,7 @@ function downsampleRows(rows, maxPoints) {
       row.sides[side.key] = {
         ...points.at(-1),
         vwap_bob: lastPriced?.vwap_bob ?? null,
-        volume_asset: points.reduce((sum, point) => sum + Number(point.volume_asset || 0), 0),
-        validated_events: points.reduce(
-          (sum, point) => sum + Number(point.validated_events || 0),
-          0,
-        ),
+        activity: points.reduce((sum, point) => sum + Number(point.activity || 0), 0),
         price_observed: points.some((point) => point.price_observed),
       };
     });
@@ -407,16 +353,17 @@ function flattenRow(row) {
     time: Date.parse(row.timestamp_utc),
     p2pVenta: buy?.vwap_bob ?? null,
     p2pCompra: sell?.vwap_bob ?? null,
-    tcoVenta: official?.venta ?? null,
-    tcoCompra: official?.compra ?? null,
-    volVenta: Number(buy?.volume_asset || 0),
-    volCompra: Number(sell?.volume_asset || 0),
-    txVenta: Number(buy?.validated_events || 0),
-    txCompra: Number(sell?.validated_events || 0),
+    tco: official?.tco ?? null,
+    actVenta: Number(buy?.activity || 0),
+    actCompra: Number(sell?.activity || 0),
+    shareVenta: buy?.share ?? null,
+    shareCompra: sell?.share ?? null,
   };
 }
 
 /* --------------------------------------------------------------- métricas -- */
+
+const porcentaje = (valor) => traducir("{n} %", { n: percentFormat.format(valor) });
 
 function renderDelta(node, change) {
   node.classList.remove("up", "down");
@@ -425,7 +372,7 @@ function renderDelta(node, change) {
     return;
   }
   node.classList.add(change >= 0 ? "up" : "down");
-  node.textContent = `${change >= 0 ? "▲" : "▼"} ${traducir("{n} %", { n: percentFormat.format(Math.abs(change)) })}`;
+  node.textContent = `${change >= 0 ? "▲" : "▼"} ${porcentaje(Math.abs(change))}`;
 }
 
 function rotuloBrecha() {
@@ -450,9 +397,27 @@ function tcoPrevio() {
   return fechas.length ? state.tco.get(fechas.at(-1)) : null;
 }
 
-function renderMetrics(rows) {
-  $("#volume-unit").textContent = state.asset;
+function renderReparto() {
+  const ventana = state.participacion?.scopes?.[state.platform]?.[String(state.rangeDays)] || null;
+  [["volume", "volume"], ["transactions", "events"]].forEach(([id, campo]) => {
+    const venta = ventana?.[campo]?.BUY ?? null;
+    const compra = ventana?.[campo]?.SELL ?? null;
+    const tarjeta = $(`#reparto-${id}`);
+    const completo = venta != null && compra != null;
+    $(`#metric-${id}-venta`).textContent = venta == null ? "—" : porcentaje(venta);
+    $(`#metric-${id}-compra`).textContent = compra == null ? "—" : porcentaje(compra);
+    $(`#barra-${id}-venta`).style.flexGrow = completo ? String(venta) : "1";
+    $(`#barra-${id}-compra`).style.flexGrow = completo ? String(compra) : "1";
+    tarjeta.classList.toggle("sin-reparto", !completo);
+    if (completo) {
+      tarjeta.dataset.tip = traducir("P2P Venta − P2P Compra: {n} pp", { n: diferenciaFormat.format(venta - compra) });
+    } else {
+      delete tarjeta.dataset.tip;
+    }
+  });
+}
 
+function renderMetrics(rows) {
   const summaries = {};
   displaySides.forEach((side) => {
     const summary = summarizeSide(rows, side);
@@ -462,12 +427,7 @@ function renderMetrics(rows) {
       : priceFormat.format(summary.price);
     renderDelta($(`#delta-${side.slug}`), summary.change);
   });
-  ["volume", "transactions"].forEach((campo) => {
-    const total = summaries.venta[campo] + summaries.compra[campo];
-    const parteVenta = total > 0 ? Math.round((summaries.venta[campo] / total) * 10000) / 100 : null;
-    $(`#metric-${campo}-venta`).textContent = parteVenta == null ? "—" : traducir("{n} %", { n: percentFormat.format(parteVenta) });
-    $(`#metric-${campo}-compra`).textContent = parteVenta == null ? "—" : traducir("{n} %", { n: percentFormat.format(100 - parteVenta) });
-  });
+  renderReparto();
 
   const venta = summaries.venta.price;
   const compra = summaries.compra.price;
@@ -482,50 +442,41 @@ function renderMetrics(rows) {
       : traducir("{pct} % sobre el precio de compra", { pct: percentFormat.format((spread / Number(compra)) * 100) });
   }
 
-  /* Brecha del lado activo: precio P2P frente al TCO vigente del mismo lado. */
+  const official = tcoVigente();
+  const oficial = official ? official.tco : null;
+
   rotuloBrecha();
   if (enSpread()) {
     $("#metric-gap").textContent = "—";
     $("#metric-gap-pct").textContent = traducir("Elige venta o compra para ver su brecha");
   } else {
-    const etiqueta = state.side === "venta" ? "Venta" : "Compra";
     const p2p = summaries[state.side].price;
-    const vig = tcoVigente();
-    const oficialLado = vig ? vig[state.side] : null;
-    if (p2p == null || oficialLado == null) {
+    if (p2p == null || oficial == null) {
       $("#metric-gap").textContent = "—";
-      $("#metric-gap-pct").textContent = traducir("P2P frente al tipo de cambio oficial");
+      $("#metric-gap-pct").textContent = traducir("P2P frente al TCO");
     } else {
-      const gap = Number(p2p) - Number(oficialLado);
+      const gap = Number(p2p) - Number(oficial);
       $("#metric-gap").textContent = priceFormat.format(gap);
-      $("#metric-gap-pct").textContent = traducir(`{pct} % sobre el TCO ${etiqueta}`, { pct: percentFormat.format((gap / Number(oficialLado)) * 100) });
+      $("#metric-gap-pct").textContent = traducir("{pct} % sobre el TCO", { pct: percentFormat.format((gap / Number(oficial)) * 100) });
     }
   }
 
-  const official = tcoVigente();
   const previo = tcoPrevio();
   const fecha = (iso) => dayFormat.format(new Date(`${iso}T12:00:00Z`));
-
-  ["venta", "compra"].forEach((lado) => {
-    const actual = official ? official[lado] : null;
-    $(`#metric-tco-${lado}`).textContent = actual == null ? "—" : tcoFormat.format(actual);
-    $(`#metric-tco-${lado}-stamp`).textContent = official ? fecha(official.vigencia) : "";
-
-    const anterior = previo ? previo[lado] : null;
-    if (actual == null || anterior == null) {
-      const nota = $(`#metric-tco-${lado}-note`);
-      nota.className = "metric-note";
-      nota.textContent = "Banco Central de Bolivia";
-      return;
-    }
-    const cambio = Number(actual) - Number(anterior);
-    const signo = cambio > 0 ? "▲" : cambio < 0 ? "▼" : "=";
-    const pct = Number(anterior) === 0 ? "" : traducir(" · {n} %", { n: percentFormat.format((cambio / Number(anterior)) * 100) });
-    const nota = $(`#metric-tco-${lado}-note`);
-    nota.className = `metric-note delta ${cambio > 0 ? "up" : cambio < 0 ? "down" : ""}`.trim();
-    nota.textContent =
-      `${signo} ${priceFormat.format(Math.abs(cambio))}${pct} vs ${fecha(previo.vigencia)}`;
-  });
+  $("#metric-tco").textContent = oficial == null ? "—" : tcoFormat.format(oficial);
+  $("#metric-tco-stamp").textContent = official ? fecha(official.vigencia) : "";
+  const nota = $("#metric-tco-note");
+  const anterior = previo ? previo.tco : null;
+  if (oficial == null || anterior == null) {
+    nota.className = "metric-note";
+    nota.textContent = "Banco Central de Bolivia";
+    return;
+  }
+  const cambio = Number(oficial) - Number(anterior);
+  const signo = cambio > 0 ? "▲" : cambio < 0 ? "▼" : "=";
+  const pct = Number(anterior) === 0 ? "" : traducir(" · {n} %", { n: percentFormat.format((cambio / Number(anterior)) * 100) });
+  nota.className = `metric-note delta ${cambio > 0 ? "up" : cambio < 0 ? "down" : ""}`.trim();
+  nota.textContent = `${signo} ${priceFormat.format(Math.abs(cambio))}${pct} vs ${fecha(previo.vigencia)}`;
 }
 
 /* --------------------------------------------------------------- gráfico -- */
@@ -537,14 +488,14 @@ function svgElement(name, attributes = {}) {
 }
 
 function chartGeometry(points, width, height) {
-  const withVolume = state.showVolume;
+  const withActivity = state.showActivity;
   const padLeft = 8;
   const padRight = 58;
   const padTop = 14;
   const padBottom = 26;
-  const volumeHeight = withVolume ? Math.round(height * 0.24) : 0;
+  const activityHeight = withActivity ? Math.round(height * 0.24) : 0;
   const priceTop = padTop;
-  const priceBottom = height - padBottom - (withVolume ? volumeHeight + 24 : 0);
+  const priceBottom = height - padBottom - (withActivity ? activityHeight + 24 : 0);
 
   const activeSeries = sideSeries();
   const values = [];
@@ -566,15 +517,15 @@ function chartGeometry(points, width, height) {
   const xOf = (index) => padLeft + (index / span) * (width - padLeft - padRight);
   const yOf = (value) => priceBottom - ((Number(value) - low) / (high - low)) * (priceBottom - priceTop);
 
-  const maxVolume = withVolume
-    ? Math.max(1, ...points.map((point) => (enSpread()
-      ? Math.max(point.volVenta || 0, point.volCompra || 0)
-      : (state.side === "venta" ? point.volVenta : point.volCompra) || 0)))
+  const maxActivity = withActivity
+    ? Math.max(Number.EPSILON, ...points.map((point) => (enSpread()
+      ? Math.max(point.actVenta || 0, point.actCompra || 0)
+      : (state.side === "venta" ? point.actVenta : point.actCompra) || 0)))
     : 1;
-  const volumeBase = height - padBottom;
-  const yVol = (value) => volumeBase - (value / maxVolume) * volumeHeight;
+  const activityBase = height - padBottom;
+  const yAct = (value) => activityBase - (value / maxActivity) * activityHeight;
 
-  return { xOf, yOf, yVol, low, high, priceTop, priceBottom, volumeBase, volumeHeight, padRight, withVolume, activeSeries };
+  return { xOf, yOf, yAct, low, high, priceTop, priceBottom, activityBase, activityHeight, padRight, withActivity, activeSeries };
 }
 
 function linePath(points, geo, key) {
@@ -654,7 +605,7 @@ function gapShapes(points, geo, upper, lower) {
 function renderChart(points) {
   const svg = $("#market-chart");
   const wrap = $("#chart-wrap");
-  wrap.classList.toggle("no-volume", !state.showVolume);
+  wrap.classList.toggle("no-volume", !state.showActivity);
   svg.textContent = "";
 
   const width = svg.clientWidth || wrap.clientWidth || 600;
@@ -711,33 +662,31 @@ function renderChart(points) {
     }));
   }
 
-  /* barras de volumen */
-  if (geo.withVolume) {
-    /* Solo el volumen del lado que se esta viendo; en modo spread, los dos. */
+  if (geo.withActivity) {
     const barras = enSpread()
-      ? [["volVenta", tone.p2pVenta, -1], ["volCompra", tone.p2pCompra, 1]]
-      : [[state.side === "venta" ? "volVenta" : "volCompra", tone[SIDE_VIEW[state.side].p2p], 0]];
+      ? [["actVenta", tone.p2pVenta, -1], ["actCompra", tone.p2pCompra, 1]]
+      : [[state.side === "venta" ? "actVenta" : "actCompra", tone[SIDE_VIEW[state.side].p2p], 0]];
     const slot = (width - 8 - geo.padRight) / Math.max(points.length, 1);
     const barWidth = clamp(slot * (enSpread() ? 0.4 : 0.78), 0.6, 22);
-    const volumeGroup = svgElement("g");
+    const activityGroup = svgElement("g");
     points.forEach((point, index) => {
       const x = geo.xOf(index);
       barras.forEach(([key, color, dir]) => {
         const value = point[key];
         if (!value) return;
-        const y = geo.yVol(value);
-        volumeGroup.append(svgElement("rect", {
+        const y = geo.yAct(value);
+        activityGroup.append(svgElement("rect", {
           x: (x + dir * barWidth * 0.55 - barWidth / 2).toFixed(1),
           y: y.toFixed(1),
           width: barWidth.toFixed(1),
-          height: Math.max(1.5, geo.volumeBase - y).toFixed(1),
+          height: Math.max(1.5, geo.activityBase - y).toFixed(1),
           fill: color, opacity: .5, rx: Math.min(2, barWidth / 3),
         }));
       });
     });
-    svg.append(volumeGroup);
+    svg.append(activityGroup);
     svg.append(svgElement("line", {
-      x1: 0, x2: width - geo.padRight + 4, y1: geo.volumeBase, y2: geo.volumeBase,
+      x1: 0, x2: width - geo.padRight + 4, y1: geo.activityBase, y2: geo.activityBase,
       stroke: "rgba(255,255,255,.12)", "stroke-width": 1,
     }));
   }
@@ -807,7 +756,7 @@ function renderChart(points) {
 
   /* crosshair */
   const crosshair = svgElement("line", {
-    id: "crosshair", x1: 0, x2: 0, y1: geo.priceTop - 6, y2: geo.volumeBase,
+    id: "crosshair", x1: 0, x2: 0, y1: geo.priceTop - 6, y2: geo.activityBase,
     stroke: "rgba(255,255,255,.3)", "stroke-width": 1, "stroke-dasharray": "3 3",
     visibility: "hidden",
   });
@@ -862,8 +811,17 @@ function showTooltip(event) {
   if (pP2p != null && pTco != null && Number(pTco) !== 0) {
     const gap = Number(pP2p) - Number(pTco);
     const nombre = traducir(enSpread() ? "Spread P2P" : "Brecha");
-    rows.push(`<div class="tip-row"><span>${nombre}</span><b>Bs ${priceFormat.format(gap)} · ${traducir("{n} %", { n: percentFormat.format((gap / Number(pTco)) * 100) })}</b></div>`);
+    rows.push(`<div class="tip-row"><span>${nombre}</span><b>Bs ${priceFormat.format(gap)} · ${porcentaje((gap / Number(pTco)) * 100)}</b></div>`);
   }
+  if (esPlataforma()) {
+    const lados = enSpread()
+      ? [["Participación · Venta", point.shareVenta], ["Participación · Compra", point.shareCompra]]
+      : [[state.side === "venta" ? "Participación · Venta" : "Participación · Compra", state.side === "venta" ? point.shareVenta : point.shareCompra]];
+    lados.forEach(([clave, share]) => {
+      if (share != null) rows.push(`<div class="tip-row"><span>${traducir(clave)}</span><b>${porcentaje(share)}</b></div>`);
+    });
+  }
+
   const tooltip = $("#chart-tooltip");
   const cuando = esDiaria()
     ? diaLargoFormat.format(instante(point.time))
@@ -914,7 +872,7 @@ function showLoading() {
 
   /* la captura anterior no se conserva en pantalla */
   $("#market-chart").textContent = "";
-  ["#metric-price-venta", "#metric-price-compra", "#metric-tco-venta", "#metric-tco-compra",
+  ["#metric-price-venta", "#metric-price-compra", "#metric-tco",
     "#metric-spread", "#metric-gap", "#metric-volume-venta", "#metric-volume-compra",
     "#metric-transactions-venta", "#metric-transactions-compra"].forEach((id) => {
     $(id).textContent = "—";
@@ -923,11 +881,13 @@ function showLoading() {
     $(id).textContent = "—";
     $(id).classList.remove("up", "down");
   });
+  ["#reparto-volume", "#reparto-transactions"].forEach((id) => {
+    $(id).classList.add("sin-reparto");
+    delete $(id).dataset.tip;
+  });
   $("#metric-spread-pct").textContent = "—";
   $("#metric-gap-pct").textContent = "—";
-  ["#metric-tco-venta-stamp", "#metric-tco-compra-stamp"].forEach((id) => {
-    $(id).textContent = "";
-  });
+  $("#metric-tco-stamp").textContent = "";
   $("#status-rel").textContent = "";
 }
 
@@ -949,23 +909,24 @@ function showError(error) {
 function renderFrequencySelector() {
   const host = $("#frequency-selector");
   host.textContent = "";
+  const disponibles = availableFrequencies(state.asset);
   FREQ_OPTIONS.forEach((option) => {
-    const supported = availableFrequencies(state.asset).includes(option.id);
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = option.label;
     button.dataset.frequency = option.id;
-    if (!supported) {
-      button.disabled = true;
-      button.dataset.tip = traducir("Disponible próximamente");
+    if (!disponibles.includes(option.id)) {
+      button.setAttribute("aria-disabled", "true");
+      button.dataset.tip = traducir(FRECUENCIAS.total[state.asset].includes(option.id) ? "Solo mercado total" : "Disponible próximamente");
+    } else if (option.id === state.frequency) {
+      button.classList.add("active");
     }
-    if (supported && option.id === state.frequency) button.classList.add("active");
     host.append(button);
   });
 }
 
 /* La leyenda es el unico conmutador: al tocar cualquier serie de un lado, el
-   grafico pasa entero a ese lado (precio P2P + su TCO) y se sombrea la brecha. */
+   grafico pasa entero a ese lado (precio P2P + TCO) y se sombrea la brecha. */
 function renderLegend() {
   const host = $("#legend");
   const tone = palette();
@@ -980,12 +941,12 @@ function renderLegend() {
     host.append(button);
   });
 
-  const volume = document.createElement("button");
-  volume.type = "button";
-  volume.dataset.serie = "volume";
-  volume.setAttribute("aria-pressed", String(state.showVolume));
-  volume.innerHTML = `<i class="swatch bar" style="background:${tone[SIDE_VIEW[state.side].p2p]}"></i>${traducir("Volumen")}`;
-  host.append(volume);
+  const activity = document.createElement("button");
+  activity.type = "button";
+  activity.dataset.serie = "activity";
+  activity.setAttribute("aria-pressed", String(state.showActivity));
+  activity.innerHTML = `<i class="swatch bar" style="background:${tone[SIDE_VIEW[state.side].p2p]}"></i>${traducir("Actividad relativa")}`;
+  host.append(activity);
 
   /* Boton compacto: compara los dos precios P2P entre si. */
   const spread = document.createElement("button");
@@ -1001,9 +962,25 @@ function renderLegend() {
   host.append(spread);
 }
 
+const plataformaSel = armarDesplegable(
+  $("#plataforma-sel"),
+  () => PLATAFORMAS_P2P.map((p) => [p.id, traducir(p.nombre), `<i class="sel-punto${p.color ? "" : " todas"}"${p.color ? ` style="background:${p.color}"` : ""}></i>`]),
+  () => state.platform,
+  (clave) => {
+    if (clave === state.platform) return;
+    state.platform = clave;
+    const disponibles = availableFrequencies(state.asset);
+    if (!disponibles.includes(state.frequency)) state.frequency = disponibles.includes("1h") ? "1h" : disponibles[0];
+    savePreferences();
+    syncControls();
+    refresh();
+  },
+);
+
 function syncControls() {
   document.documentElement.dataset.asset = state.asset;
-  $("#market-label").textContent = `${state.asset} / Bs.`;
+  const plataforma = PLATAFORMAS_P2P.find((p) => p.id === state.platform);
+  $("#market-label").textContent = esPlataforma() ? `${state.asset} / Bs. · ${plataforma.nombre}` : `${state.asset} / Bs.`;
   document.querySelectorAll("#asset-selector button").forEach((button) => {
     const active = button.dataset.asset === state.asset;
     button.classList.toggle("active", active);
@@ -1012,6 +989,7 @@ function syncControls() {
   document.querySelectorAll("#range-selector button").forEach((button) => {
     button.classList.toggle("active", Number(button.dataset.range) === state.rangeDays);
   });
+  plataformaSel.sinc();
   renderFrequencySelector();
   renderLegend();
   rotuloBrecha();
@@ -1028,7 +1006,7 @@ function paint() {
     ["p2pVenta", "p2pCompra"],
   );
   const usable = flat.filter((point) => (
-    point.p2pVenta != null || point.p2pCompra != null || point.volVenta || point.volCompra
+    point.p2pVenta != null || point.p2pCompra != null || point.actVenta || point.actCompra
   ));
 
   $("#chart-skeleton").hidden = true;
@@ -1049,8 +1027,9 @@ async function refresh() {
   let official = null;
   let tcoError = false;
 
+  const participacion = loadParticipacion(state.asset).catch(() => null);
   try {
-    market = await loadMarket(state.asset, state.frequency);
+    market = await loadMarket(state.asset, state.platform, state.frequency);
   } catch (error) {
     if (token !== state.token) return;
     showError(error);
@@ -1062,10 +1041,12 @@ async function refresh() {
   } catch (error) {
     tcoError = true;
   }
+  const reparto = await participacion;
 
   if (token !== state.token) return;
 
   state.tco = official ? official.map : new Map();
+  state.participacion = reparto;
   state.rows = buildRows(market, state.rangeDays);
 
   const asOf = market.BUY?.as_of_utc || market.SELL?.as_of_utc || null;
@@ -1129,7 +1110,7 @@ function bindEvents() {
 
   $("#frequency-selector").addEventListener("click", (event) => {
     const button = event.target.closest("button[data-frequency]");
-    if (!button || button.disabled || button.dataset.frequency === state.frequency) return;
+    if (!button || button.getAttribute("aria-disabled") === "true" || button.dataset.frequency === state.frequency) return;
     state.frequency = button.dataset.frequency;
     savePreferences();
     syncControls();
@@ -1151,15 +1132,20 @@ function bindEvents() {
     const button = event.target.closest("button[data-serie]");
     if (!button) return;
     const id = button.dataset.serie;
-    if (id === "volume") {
-      state.showVolume = !state.showVolume;
+    if (id === "activity") {
+      state.showActivity = !state.showActivity;
     } else if (id === "spread") {
       state.side = enSpread() ? "venta" : "spread";
     } else {
       const serie = SERIES.find((item) => item.id === id);
       if (!serie) return;
-      if (!enSpread() && serie.side === state.side) return;
-      state.side = serie.side;
+      if (!serie.side) {
+        if (!enSpread()) return;
+        state.side = "venta";
+      } else {
+        if (!enSpread() && serie.side === state.side) return;
+        state.side = serie.side;
+      }
     }
     savePreferences();
     renderLegend();
@@ -1191,6 +1177,7 @@ function bindEvents() {
     prepararFormatos();
     hideTooltip();
     $("#tip-bubble").hidden = true;
+    plataformaSel.sinc();
     renderFrequencySelector();
     renderLegend();
     rotuloBrecha();
