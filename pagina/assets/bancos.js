@@ -20,7 +20,6 @@
     "BANCO PYME ECOFUTURO": ["Banco PyME Ecofuturo", "Ecofuturo", "ecofuturo.svg"],
     "BANCO SOLIDARIO": ["Banco Solidario", "BancoSol", "bancosol.svg"],
     "BANCO UNION": ["Banco Unión", "Unión", "union.png"],
-    "IDEPRO IFD": ["IDEPRO IFD", "IDEPRO", "idepro.png"],
   };
 
   const SERIES = [
@@ -95,6 +94,7 @@
       const etiqueta = (etiquetas[j] || "").trim();
       if (etiqueta !== "USD compra" && etiqueta !== "USD venta") continue;
       const nombre = nombres[j].trim();
+      if (nombre === "IDEPRO IFD") continue;
       if (!columnas.has(nombre)) columnas.set(nombre, {});
       columnas.get(nombre)[etiqueta === "USD compra" ? "compra" : "venta"] = j;
     }
@@ -223,10 +223,6 @@
     el.textContent = `${actual > inicial ? "▲" : "▼"} ${traducir("{n} %", { n: fmtPct.format(Math.abs(pct)) })}`;
   }
 
-  function periodoTexto() {
-    return estado.dias === 1 ? traducir("en las últimas 24 horas") : traducir("en los últimos {n} días", { n: estado.dias });
-  }
-
   function metricas(banco) {
     const [t0, t1] = rango();
     const actual = vigente(banco, t1);
@@ -257,9 +253,6 @@
     texto("#banco-spread-pct", spread == null ? traducir("La entidad no publica compra")
       : traducir("{pct} % sobre el precio de compra", { pct: fmtPct.format((spread / actual.compra) * 100) }));
 
-    const cambios = banco.puntos.filter((p, i) => i > 0 && p.t > t0 && p.t <= t1).length;
-    texto("#banco-cambios", String(cambios));
-    texto("#banco-cambios-nota", periodoTexto());
   }
 
   function leyenda() {
@@ -573,6 +566,41 @@
     return t;
   }
 
+  function ajustarEjePizarra() {
+    const escala = $b("#pz-escala");
+    const pista = escala.querySelector(".pz-refs");
+    if (!pista || !pista.clientWidth) return;
+    const ancho = pista.clientWidth;
+    const etiquetas = [...pista.querySelectorAll(".pz-etiqueta")];
+    const alinear = (el) => {
+      const posicion = (parseFloat(el.style.left) / 100) * ancho;
+      const desplazamiento = Math.max(-posicion, Math.min(-el.offsetWidth / 2, ancho - posicion - el.offsetWidth));
+      el.style.transform = `translateX(${desplazamiento.toFixed(1)}px)`;
+      el.style.setProperty("--pz-origen", `${(-desplazamiento).toFixed(1)}px`);
+    };
+    const chocan = (a, b) => a.left < b.right + 8 && a.right + 8 > b.left;
+    escala.classList.remove("con-referencia-arriba");
+    etiquetas.forEach((el) => {
+      el.classList.remove("arriba");
+      alinear(el);
+    });
+    if (etiquetas.length === 2) {
+      const distancia = Math.abs(parseFloat(etiquetas[0].style.left) - parseFloat(etiquetas[1].style.left)) * ancho / 100;
+      if (distancia < 90 || chocan(etiquetas[0].getBoundingClientRect(), etiquetas[1].getBoundingClientRect())) {
+        etiquetas[1].classList.add("arriba");
+        escala.classList.add("con-referencia-arriba");
+      }
+    }
+    const ocupadas = etiquetas.filter((el) => !el.classList.contains("arriba")).map((el) => el.getBoundingClientRect());
+    escala.querySelectorAll(".pz-marca").forEach((el) => {
+      el.hidden = false;
+      alinear(el);
+      const caja = el.getBoundingClientRect();
+      el.hidden = ocupadas.some((otra) => chocan(caja, otra));
+      if (!el.hidden) ocupadas.push(caja);
+    });
+  }
+
   function pizarra() {
     const caja = $b("#pizarra");
     const precios = preciosAhora();
@@ -580,25 +608,20 @@
     if (!precios.length) return;
     const tco = tcoDe(estado.fin);
     const p2p = estado.p2pVenta;
-
-    const niveles = [];
-    precios.forEach((x) => {
-      const ultimo = niveles.at(-1);
-      if (ultimo && ultimo.valor === x.valor) ultimo.bancos.push(x.banco);
-      else niveles.push({ valor: x.valor, bancos: [x.banco] });
-    });
-    const barato = niveles[0];
-    const caro = niveles.at(-1);
-    texto("#pz-barato", precio(barato.valor));
-    texto("#pz-barato-de", barato.bancos.length === 1 ? barato.bancos[0].largo : nombrar(barato.bancos));
-    texto("#pz-caro", precio(caro.valor));
-    texto("#pz-caro-de", caro.bancos.length === 1 ? caro.bancos[0].largo : nombrar(caro.bancos));
+    const barato = precios[0].valor;
+    const caro = precios.at(-1).valor;
+    const bancosBaratos = precios.filter((x) => x.valor === barato).map((x) => x.banco);
+    const bancosCaros = precios.filter((x) => x.valor === caro).map((x) => x.banco);
+    texto("#pz-barato", precio(barato));
+    texto("#pz-barato-de", bancosBaratos.length === 1 ? bancosBaratos[0].largo : nombrar(bancosBaratos));
+    texto("#pz-caro", precio(caro));
+    texto("#pz-caro-de", bancosCaros.length === 1 ? bancosCaros[0].largo : nombrar(bancosCaros));
 
     const refs = [
       tco != null ? { clase: "tco", nombre: traducir("TCO"), valor: tco } : null,
       p2p != null ? { clase: "p2p", nombre: traducir("P2P Venta"), valor: p2p } : null,
     ].filter(Boolean);
-    const todos = [...niveles.map((n) => n.valor), ...refs.map((r) => r.valor)];
+    const todos = [...precios.map((n) => n.valor), ...refs.map((r) => r.valor)];
     let lo = Math.min(...todos);
     let hi = Math.max(...todos);
     const margen = Math.max((hi - lo) * 0.05, 0.01);
@@ -606,24 +629,33 @@
     hi += margen;
     const x = (v) => ((v - lo) / (hi - lo)) * 100;
     const origen = x(tco ?? lo + margen);
-    const alturaRefs = refs.length * 18 + 8;
-
-    const escala = $b("#pz-escala");
-    escala.style.gridTemplateRows = `${alturaRefs}px repeat(${niveles.length}, auto)`;
-    const partes = [`<div class="pz-refs" aria-hidden="true">${refs.map((r, i) => {
-      const px = x(r.valor);
-      const ancla = px < 18 ? "inicio" : px > 82 ? "fin" : "medio";
-      return `<b class="pz-etiqueta ${r.clase} ${ancla}" style="left:${px.toFixed(2)}%;top:${i * 18}px">${escaparHtml(r.nombre)} ${fmtEje.format(r.valor)}</b><i class="pz-ref ${r.clase}" style="left:${px.toFixed(2)}%;top:${i * 18 + 16}px"></i>`;
-    }).join("")}</div>`];
-    niveles.forEach((nivel, i) => {
-      const fila = i + 2;
-      const marca = nivel === barato ? " barato" : nivel === caro ? " caro" : "";
-      const hasta = x(nivel.valor);
-      partes.push(`<div class="pz-logos${marca}" style="grid-row:${fila}">${nivel.bancos.map((banco) => `<button type="button" class="pz-banco" data-banco="${escaparHtml(banco.nombre)}" aria-label="${escaparHtml(banco.largo)}" data-tip="${escaparHtml(tipBanco(banco, nivel.valor, tco, p2p))}">${placa(banco)}</button>`).join("")}</div>`);
-      partes.push(`<div class="pz-pista${marca}" style="grid-row:${fila}"><i class="pz-tallo" style="left:${Math.min(origen, hasta).toFixed(2)}%;width:${Math.abs(hasta - origen).toFixed(2)}%"></i><i class="pz-punto" style="left:${hasta.toFixed(2)}%"></i></div>`);
-      partes.push(`<div class="pz-precio${marca}" style="grid-row:${fila}">${precio(nivel.valor)}</div>`);
+    const partes = ['<div class="pz-filas">'];
+    precios.forEach(({ banco, valor }) => {
+      const marca = valor === barato ? " barato" : valor === caro ? " caro" : "";
+      const hasta = x(valor);
+      partes.push(`<button type="button" class="pz-banco${marca}" data-banco="${escaparHtml(banco.nombre)}" aria-label="${escaparHtml(banco.largo)}" data-tip="${escaparHtml(tipBanco(banco, valor, tco, p2p))}">
+        <span class="pz-entidad">${placa(banco)}<span class="pz-nombre">${escaparHtml(banco.corto)}</span></span>
+        <span class="pz-pista"><i class="pz-tallo" style="left:${Math.min(origen, hasta).toFixed(2)}%;width:${Math.abs(hasta - origen).toFixed(2)}%"></i><i class="pz-punto" style="left:${hasta.toFixed(2)}%"></i></span>
+        <span class="pz-precio"><span>${fmtEje.format(valor)}</span>${tco != null ? `<small>${fmtDif.format(valor - tco)}</small>` : ""}</span>
+      </button>`);
     });
+    partes.push(`<div class="pz-refs" aria-hidden="true">${refs.map((r) => {
+      const posicion = x(r.valor).toFixed(2);
+      return `<i class="pz-ref ${r.clase}" style="left:${posicion}%"></i><b class="pz-etiqueta ${r.clase}" style="left:${posicion}%">${escaparHtml(r.nombre)} ${fmtEje.format(r.valor)}</b>`;
+    }).join("")}</div></div>`);
+    const base = 10 ** Math.floor(Math.log10((hi - lo) / 3));
+    const paso = [1, 2, 2.5, 5, 10].map((n) => Math.max(0.01, n * base))
+      .find((n) => Math.floor(hi / n) - Math.ceil(lo / n) + 1 <= 4);
+    const marcas = [];
+    for (let i = Math.ceil(lo / paso); i * paso <= hi; i += 1) {
+      const valor = i * paso;
+      marcas.push(`<span class="pz-marca" style="left:${x(valor).toFixed(2)}%">${fmtEje.format(valor)}</span>`);
+    }
+    partes.push(`<div class="pz-eje" aria-hidden="true"><div class="pz-eje-pista">${marcas.join("")}</div></div>`);
+    const escala = $b("#pz-escala");
     escala.innerHTML = partes.join("");
+    ajustarEjePizarra();
+    document.fonts?.ready.then(ajustarEjePizarra);
   }
 
   function marcarActivo() {
@@ -744,7 +776,10 @@
     let espera = null;
     window.addEventListener("resize", () => {
       clearTimeout(espera);
-      espera = setTimeout(dibujar, 160);
+      espera = setTimeout(() => {
+        dibujar();
+        ajustarEjePizarra();
+      }, 160);
     });
 
     addEventListener("idiomachange", () => {
