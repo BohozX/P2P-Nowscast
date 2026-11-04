@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/styles.css?v=3">
+    <link rel="stylesheet" href="assets/styles.css?v=4">
   </head>
   <body>
     <header class="nav">
@@ -157,7 +157,7 @@
             </div>
             <div class="legend" id="legend" aria-label="Series del gráfico" data-i18n-aria="Series del gráfico"></div>
             <div class="chart-wrap" id="chart-wrap">
-              <svg id="market-chart" role="img" aria-label="Precio P2P de compra y venta, TCO y actividad relativa" data-i18n-aria="Precio P2P de compra y venta, TCO y actividad relativa"></svg>
+              <svg id="market-chart" role="img" aria-label="Precio P2P de compra y venta, TCO y operaciones de venta y compra" data-i18n-aria="Precio P2P de compra y venta, TCO y operaciones de venta y compra"></svg>
               <div class="chart-tooltip" id="chart-tooltip" hidden></div>
               <div class="chart-skeleton" id="chart-skeleton" hidden aria-hidden="true"><span></span><span></span><span></span></div>
               <div class="chart-state" id="empty-state" hidden>
@@ -174,22 +174,17 @@
 
           <section class="bloque" id="plataformas">
             <div class="grafico-head">
-              <h3 id="pl-titulo" data-i18n="Por plataforma · últimos 30 días">Por plataforma · últimos 30 días</h3>
+              <h3 id="pl-titulo">Venta y compra por plataforma · USDT</h3>
               <div class="mandos">
-                <div class="vista" id="pl-lado" role="group" aria-label="Lado" data-i18n-aria="Lado">
-                  <button class="active" type="button" data-lado="compra" aria-pressed="true" data-i18n="Venta">Venta</button>
-                  <button type="button" data-lado="venta" aria-pressed="false" data-i18n="Compra">Compra</button>
+                <div class="vista" id="pl-rango" role="group" aria-label="Periodo" data-i18n-aria="Periodo">
+                  <button type="button" data-dias="1" aria-pressed="false">24H</button>
+                  <button type="button" data-dias="7" aria-pressed="false">7D</button>
+                  <button class="active" type="button" data-dias="30" aria-pressed="true">30D</button>
                 </div>
               </div>
             </div>
-            <div class="ranking-cab tres"><span data-i18n="Plataforma">Plataforma</span><span data-i18n="Volumen">Volumen</span><span data-i18n="Transacciones">Transacciones</span></div>
-            <ol class="ranking tres" id="pl-ranking"></ol>
-            <div class="legend estatica" id="pl-leyenda"></div>
-            <div class="chart-wrap no-volume" id="pl-wrap">
-              <svg class="grafico-linea" id="pl-chart" role="img" aria-label="Participación diaria por plataforma" data-i18n-aria="Participación diaria por plataforma"></svg>
-              <div class="chart-tooltip" id="pl-tip" hidden></div>
-            </div>
-            <p class="aviso-error" id="pl-error" hidden data-i18n="No fue posible cargar la participación por plataforma.">No fue posible cargar la participación por plataforma.</p>
+            <div class="pl-grilla" id="pl-columnas"></div>
+            <p class="aviso-error" id="pl-error" hidden data-i18n="No fue posible cargar los datos por plataforma.">No fue posible cargar los datos por plataforma.</p>
           </section>
 
           <details class="metodologia">
@@ -541,14 +536,14 @@
     <div class="tip-bubble" id="tip-bubble" hidden></div>
 
     <script src="assets/rutas.js?v=2" defer></script>
-    <script src="assets/idioma.js?v=4" defer></script>
+    <script src="assets/idioma.js?v=5" defer></script>
     <script src="assets/desplegable.js?v=1" defer></script>
-    <script src="assets/app.js?v=3" defer></script>
+    <script src="assets/app.js?v=4" defer></script>
     <script src="assets/bancos.js?v=3" defer></script>
     <script src="assets/portada.js?v=3" defer></script>
     <script src="assets/operaciones.js?v=2" defer></script>
     <script src="assets/observado.js?v=2" defer></script>
-    <script src="assets/plataformas.js?v=4" defer></script>
+    <script src="assets/plataformas.js?v=5" defer></script>
     <script src="assets/graficos.js?v=2" defer></script>
     <script src="assets/bcb.js?v=3" defer></script>
     <script src="assets/noticias.js?v=3" defer></script>

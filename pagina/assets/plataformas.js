@@ -4,17 +4,21 @@
   if (!$p("#plataformas")) return;
 
   const PLATAFORMAS = [
-    { id: "binance", nombre: "Binance", color: "var(--verde)" },
-    { id: "bybit", nombre: "Bybit", color: "var(--celeste)" },
-    { id: "bitget", nombre: "Bitget", color: "#b9b4ff" },
+    { id: "binance", nombre: "Binance" },
+    { id: "bybit", nombre: "Bybit" },
+    { id: "bitget", nombre: "Bitget" },
   ];
   const LADOS = { compra: "BUY", venta: "SELL" };
-  let dos, dia, diaLargo;
+  let dos, entero, dia, diaLargo, hora, fechaHora;
   const prepararFormatos = () => {
     const regional = configuracionRegional();
+    const zona = { timeZone: "America/La_Paz" };
     dos = new Intl.NumberFormat(regional, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    dia = new Intl.DateTimeFormat(regional, { timeZone: "America/La_Paz", day: "2-digit", month: "short" });
-    diaLargo = new Intl.DateTimeFormat(regional, { timeZone: "America/La_Paz", day: "2-digit", month: "short", year: "numeric" });
+    entero = new Intl.NumberFormat(regional, { maximumFractionDigits: 0 });
+    dia = new Intl.DateTimeFormat(regional, { ...zona, day: "2-digit", month: "short" });
+    diaLargo = new Intl.DateTimeFormat(regional, { ...zona, day: "2-digit", month: "short", year: "numeric" });
+    hora = new Intl.DateTimeFormat(regional, { ...zona, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+    fechaHora = new Intl.DateTimeFormat(regional, { ...zona, day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
   };
   prepararFormatos();
   const pct = (v) => (v == null ? "—" : traducir("{n} %", { n: dos.format(v) }));
@@ -25,122 +29,162 @@
     return el;
   };
 
-  let lado = "compra", datos = null, geo = null;
+  let dias = 30, datos = null, pedido = 0;
+  const cache = new Map();
+  const participaciones = new Map();
   const activo = () => document.documentElement.dataset.asset || "USDT";
+  const instante = (tiempo) => new Date(Date.parse(tiempo) + (datos.frecuencia === "1h" ? 3_600_000 : 0));
 
-  function ranking() {
-    const grupo = datos.participacion.platform_share?.["30"]?.[LADOS[lado]] || {};
-    const filas = PLATAFORMAS.map((p) => ({ ...p, volumen: grupo.volume?.[p.id] ?? null, eventos: grupo.events?.[p.id] ?? null }));
-    $p("#pl-ranking").replaceChildren(...filas.sort((a, b) => (b.volumen ?? -1) - (a.volumen ?? -1)).map((f) => {
-      const li = document.createElement("li");
-      const celda = (clase, t) => { const s = document.createElement("span"); s.className = clase; s.textContent = t; return s; };
-      const barra = document.createElement("span");
-      barra.className = "b";
-      const i = document.createElement("i");
-      i.style.width = `${f.volumen ?? 0}%`;
-      i.style.background = f.color;
-      barra.append(i);
-      li.append(celda("n", f.nombre), celda("m", pct(f.volumen)), celda("o", pct(f.eventos)), barra);
-      return li;
-    }));
+  function cabecera() {
+    $p("#pl-titulo").textContent = traducir("Venta y compra por plataforma · {activo}", { activo: activo() });
+    $p("#pl-error").textContent = traducir("No fue posible cargar los datos por plataforma.");
+    document.querySelectorAll("#pl-rango button").forEach((b) => {
+      const seleccionado = Number(b.dataset.dias) === dias;
+      b.classList.toggle("active", seleccionado);
+      b.setAttribute("aria-pressed", String(seleccionado));
+    });
   }
 
-  function grafico() {
-    const svg = $p("#pl-chart");
-    svg.replaceChildren();
-    const tiempos = [...new Set(PLATAFORMAS.flatMap((p) => (datos.series[p.id] || []).map((x) => x.timestamp_utc)))].sort();
-    if (!tiempos.length) return;
-    const ancho = svg.clientWidth || 600, alto = svg.clientHeight || 340;
-    svg.setAttribute("viewBox", `0 0 ${ancho} ${alto}`);
-    const pad = { l: 8, r: 58, t: 14, b: 26 };
-    const mapa = Object.fromEntries(PLATAFORMAS.map((p) => [p.id, new Map((datos.series[p.id] || []).map((x) => [x.timestamp_utc, x]))]));
-    const paso = (ancho - pad.l - pad.r) / tiempos.length;
-    const base = alto - pad.b;
-    const y = (v) => base - (v / 100) * (base - pad.t);
-    for (let k = 0; k <= 4; k += 1) {
-      const v = k * 25;
-      nodo("line", { x1: 0, x2: ancho - pad.r + 4, y1: y(v).toFixed(1), y2: y(v).toFixed(1), stroke: "rgba(255,255,255,.08)" }, svg);
-      nodo("text", { x: ancho - pad.r + 10, y: (y(v) + 3.5).toFixed(1), fill: "#7d7d84", "font-size": 11 }, svg).textContent = traducir("{n} %", { n: v });
-    }
-    const anchoB = Math.max(2, Math.min(24, paso * .64));
-    tiempos.forEach((t, i) => {
-      let acum = 0;
-      PLATAFORMAS.forEach((p) => {
-        const v = mapa[p.id].get(t)?.share;
-        if (!v) return;
-        nodo("rect", { x: (pad.l + paso * (i + .5) - anchoB / 2).toFixed(1), y: y(acum + v).toFixed(1), width: anchoB.toFixed(1), height: Math.max(1, y(acum) - y(acum + v)).toFixed(1), fill: p.color, opacity: .8 }, svg);
-        acum += v;
+  function bloques(plataforma) {
+    const filas = new Map();
+    Object.entries(LADOS).forEach(([lado, clave]) => {
+      datos.series[plataforma][clave].forEach((punto) => {
+        if (!filas.has(punto.timestamp_utc)) filas.set(punto.timestamp_utc, { tiempo: punto.timestamp_utc, venta: 0, compra: 0 });
+        filas.get(punto.timestamp_utc)[lado === "compra" ? "venta" : "compra"] = Number(punto.activity || 0);
       });
     });
-    const marcas = ancho < 480 ? 3 : 5;
-    for (let k = 0; k < marcas; k += 1) {
-      const i = Math.round((k / (marcas - 1)) * (tiempos.length - 1));
-      nodo("text", { x: (pad.l + paso * (i + .5)).toFixed(1), y: alto - 8, fill: "#7d7d84", "font-size": 11, "text-anchor": k === 0 ? "start" : k === marcas - 1 ? "end" : "middle" }, svg).textContent = dia.format(new Date(tiempos[i]));
-    }
-    geo = { tiempos, mapa, paso, pad, ancho };
+    return [...filas.values()].sort((a, b) => Date.parse(a.tiempo) - Date.parse(b.tiempo)).slice(-(dias === 30 ? 30 : dias * 24));
   }
 
-  function tip(ev) {
-    if (!geo) return;
-    const svg = $p("#pl-chart");
+  function grafico(columna, plataforma) {
+    const svg = columna.querySelector("svg");
+    columna.querySelector(".chart-tooltip").hidden = true;
+    svg.replaceChildren();
+    svg.__geo = null;
+    const puntos = bloques(plataforma);
+    if (!puntos.length) return;
+    const ancho = svg.clientWidth || 300, alto = svg.clientHeight || 170;
+    svg.setAttribute("viewBox", `0 0 ${ancho} ${alto}`);
+    const margen = 8, base = alto - 26, altura = base - 10;
+    const paso = (ancho - margen * 2) / puntos.length;
+    const anchoBarra = Math.min(22, Math.max(.6, paso * .78));
+    const maximo = Math.max(Number.EPSILON, ...puntos.map((p) => p.venta + p.compra));
+    puntos.forEach((p, i) => {
+      let acumulado = 0;
+      [[p.venta, "var(--green)"], [p.compra, "var(--cyan)"]].forEach(([valor, color]) => {
+        if (!valor) return;
+        const altoBarra = valor / maximo * altura;
+        acumulado += altoBarra;
+        nodo("rect", { x: margen + paso * (i + .5) - anchoBarra / 2, y: base - acumulado, width: anchoBarra, height: altoBarra, fill: color, opacity: .6 }, svg);
+      });
+    });
+    nodo("line", { x1: margen, x2: ancho - margen, y1: base, y2: base, stroke: "var(--borde2)", "stroke-width": 1 }, svg);
+    [0, puntos.length - 1].forEach((i, extremo) => {
+      const fecha = instante(puntos[i].tiempo);
+      const partes = Object.fromEntries(dia.formatToParts(fecha).map((p) => [p.type, p.value]));
+      const rotulo = `${partes.day}-${partes.month.replace(/\.$/, "")}${dias === 1 ? ` ${hora.format(fecha)}` : ""}`;
+      nodo("text", { x: extremo ? ancho - margen : margen, y: alto - 8, fill: "#7d7d84", "font-size": 11, "text-anchor": extremo ? "end" : "start" }, svg).textContent = rotulo;
+    });
+    svg.__geo = { puntos, ancho, margen, paso };
+  }
+
+  function tip(ev, columna) {
+    const svg = columna.querySelector("svg");
+    const geo = svg.__geo;
+    if (!geo || !datos) return;
     const caja = svg.getBoundingClientRect();
-    const px = ((ev.clientX - caja.left) / caja.width) * geo.ancho;
-    const i = Math.max(0, Math.min(geo.tiempos.length - 1, Math.floor((px - geo.pad.l) / geo.paso)));
-    const t = geo.tiempos[i];
-    const filas = PLATAFORMAS.map((p) => `<div class="tip-row"><span><i class="dot" style="background:${p.color}"></i>${p.nombre}</span><b>${pct(geo.mapa[p.id].get(t)?.share ?? null)}</b></div>`).join("");
-    const el = $p("#pl-tip");
-    el.innerHTML = `<h4>${diaLargo.format(new Date(t))}</h4>${filas}`;
+    if (!caja.width) return;
+    const px = (ev.clientX - caja.left) / caja.width * geo.ancho;
+    const i = Math.max(0, Math.min(geo.puntos.length - 1, Math.floor((px - geo.margen) / geo.paso)));
+    const punto = geo.puntos[i];
+    const total = punto.venta + punto.compra;
+    const fecha = instante(punto.tiempo);
+    const cuando = datos.frecuencia === "1d" ? diaLargo.format(fecha) : fechaHora.format(fecha);
+    let contenido = `<small>${traducir("Sin operaciones")}</small>`;
+    if (total > 0) {
+      const venta = Math.round(100 * punto.venta / total), compra = 100 - venta;
+      contenido = `<small>${traducir("Operaciones")}</small><div class="barra-reparto"><i class="venta" style="flex-grow:${venta}"></i><i class="compra" style="flex-grow:${compra}"></i></div><div class="tip-porcentajes"><b class="venta">${traducir("{n} %", { n: entero.format(venta) })}</b><b class="compra">${traducir("{n} %", { n: entero.format(compra) })}</b></div>`;
+    }
+    const el = columna.querySelector(".chart-tooltip");
+    el.innerHTML = `<h4>${cuando}</h4><div class="tip-operaciones">${contenido}</div>`;
     el.hidden = false;
-    const w = $p("#pl-wrap").clientWidth;
-    el.style.left = `${Math.min(Math.max(4, geo.pad.l + geo.paso * (i + .5) + 14), Math.max(4, w - el.offsetWidth - 4))}px`;
-    el.style.top = `${Math.min(Math.max(4, ev.clientY - caja.top - 20), caja.height - el.offsetHeight - 4)}px`;
+    const envoltura = columna.querySelector(".chart-wrap");
+    el.style.left = `${Math.min(Math.max(4, ev.clientX - caja.left + 14), Math.max(4, envoltura.clientWidth - el.offsetWidth - 4))}px`;
+    el.style.top = `${Math.min(Math.max(4, ev.clientY - caja.top - 20), Math.max(4, caja.height - el.offsetHeight - 4))}px`;
   }
 
   function pintar() {
-    $p("#pl-titulo").textContent = traducir("Por plataforma · {activo} · últimos 30 días", { activo: activo() });
-    $p("#pl-leyenda").innerHTML = PLATAFORMAS.map((p) => `<span><i class="swatch bar" style="background:${p.color}"></i>${p.nombre}</span>`).join("");
-    document.querySelectorAll("#pl-lado button").forEach((b) => { const a = b.dataset.lado === lado; b.classList.toggle("active", a); b.setAttribute("aria-pressed", String(a)); });
-    ranking();
-    grafico();
+    cabecera();
+    $p("#pl-columnas").replaceChildren(...PLATAFORMAS.map((p) => {
+      const ventana = datos.participacion.scopes?.[p.id]?.[String(dias)];
+      const venta = ventana?.volume?.BUY ?? null, compra = ventana?.volume?.SELL ?? null;
+      const completo = venta != null && compra != null;
+      const columna = document.createElement("div");
+      columna.className = `pl-columna${completo ? "" : " sin-reparto"}`;
+      columna.innerHTML = `<h4>${traducir(p.nombre)}</h4><div class="metric-pair"><div class="metric-side venta"><small>${traducir("Venta")}</small><strong>${pct(venta)}</strong></div><div class="metric-side compra"><small>${traducir("Compra")}</small><strong>${pct(compra)}</strong></div></div><div class="barra-reparto"><i class="venta" style="flex-grow:${completo ? venta : 1}"></i><i class="compra" style="flex-grow:${completo ? compra : 1}"></i></div><p class="pl-transacciones">${traducir("Transacciones · Venta {v} · Compra {c}", { v: pct(ventana?.events?.BUY), c: pct(ventana?.events?.SELL) })}</p><div class="chart-wrap no-volume"><svg class="grafico-linea" role="img" aria-label="${traducir("Venta y compra de {plataforma}", { plataforma: p.nombre })}"></svg><div class="chart-tooltip" hidden></div></div>`;
+      const svg = columna.querySelector("svg");
+      svg.addEventListener("pointermove", (ev) => tip(ev, columna));
+      svg.addEventListener("pointerdown", (ev) => tip(ev, columna));
+      svg.addEventListener("pointerleave", () => { columna.querySelector(".chart-tooltip").hidden = true; });
+      svg.addEventListener("pointercancel", () => { columna.querySelector(".chart-tooltip").hidden = true; });
+      return columna;
+    }));
+    graficos();
   }
 
-  let pedido = 0;
+  function graficos() {
+    document.querySelectorAll("#pl-columnas .pl-columna").forEach((columna, i) => grafico(columna, PLATAFORMAS[i].id));
+  }
+
+  function obtener(a, frecuencia) {
+    const clave = `${a}/${frecuencia}`;
+    if (!cache.has(clave)) {
+      if (!participaciones.has(a)) {
+        participaciones.set(a, cargarDatos("participacion", [a]).catch((e) => { participaciones.delete(a); throw e; }));
+      }
+      cache.set(clave, Promise.all([
+        participaciones.get(a),
+        ...PLATAFORMAS.flatMap((p) => Object.keys(LADOS).map((lado) => cargarDatos("plataforma", [a, lado, p.id, frecuencia]))),
+      ]).then(([participacion, ...series]) => ({
+        participacion, frecuencia,
+        series: Object.fromEntries(PLATAFORMAS.map((p, i) => [p.id, Object.fromEntries(Object.values(LADOS).map((lado, j) => [lado, series[i * 2 + j].points || []]))])),
+      })).catch((e) => { cache.delete(clave); throw e; }));
+    }
+    return cache.get(clave);
+  }
+
   function cargar() {
     const yo = ++pedido;
-    const a = activo();
-    Promise.all([
-      cargarDatos("participacion", [a]),
-      ...PLATAFORMAS.map((p) => cargarDatos("plataforma", [a, lado, p.id, "1d"])),
-    ])
-      .then(([participacion, ...series]) => {
+    datos = null;
+    cabecera();
+    $p("#pl-columnas").replaceChildren();
+    $p("#plataformas").hidden = false;
+    $p("#pl-error").hidden = true;
+    obtener(activo(), dias === 30 ? "1d" : "1h")
+      .then((resultado) => {
         if (yo !== pedido) return;
-        datos = { participacion, series: Object.fromEntries(PLATAFORMAS.map((p, i) => [p.id, series[i].points || []])) };
-        $p("#plataformas").hidden = false;
-        $p("#pl-error").hidden = true;
+        datos = resultado;
         pintar();
       })
       .catch((e) => {
         if (yo !== pedido) return;
         datos = null;
-        $p("#pl-ranking").replaceChildren();
-        $p("#pl-chart").replaceChildren();
+        $p("#pl-columnas").replaceChildren();
         if (e.estado === 404) $p("#plataformas").hidden = true; else $p("#pl-error").hidden = false;
       });
   }
 
-  $p("#pl-lado").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-lado]"); if (b && b.dataset.lado !== lado) { lado = b.dataset.lado; cargar(); } });
-  const svg = $p("#pl-chart");
-  svg.addEventListener("pointermove", tip);
-  svg.addEventListener("pointerdown", tip);
-  svg.addEventListener("pointerleave", () => { $p("#pl-tip").hidden = true; });
+  $p("#pl-rango").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-dias]");
+    if (b && Number(b.dataset.dias) !== dias) { dias = Number(b.dataset.dias); cargar(); }
+  });
   addEventListener("idiomachange", () => {
     prepararFormatos();
-    $p("#pl-tip").hidden = true;
-    if (datos) pintar();
+    if (datos) pintar(); else cabecera();
   });
   let ultimoActivo = activo();
   new MutationObserver(() => { if (activo() !== ultimoActivo) { ultimoActivo = activo(); cargar(); } }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-asset"] });
   let espera = 0;
-  addEventListener("resize", () => { clearTimeout(espera); espera = setTimeout(() => { if (datos) grafico(); }, 160); });
+  addEventListener("resize", () => { clearTimeout(espera); espera = setTimeout(() => { if (datos) graficos(); }, 160); });
   cargar();
 })();

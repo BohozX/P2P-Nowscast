@@ -129,6 +129,7 @@ const timeZone = "America/La_Paz";
 let priceFormat;
 let tcoFormat;
 let percentFormat;
+let integerFormat;
 let diferenciaFormat;
 let fullDateFormat;
 let shortDateFormat;
@@ -149,6 +150,7 @@ function prepararFormatos() {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+  integerFormat = new Intl.NumberFormat(regional, { maximumFractionDigits: 0 });
   diferenciaFormat = new Intl.NumberFormat(regional, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -356,8 +358,6 @@ function flattenRow(row) {
     tco: official?.tco ?? null,
     actVenta: Number(buy?.activity || 0),
     actCompra: Number(sell?.activity || 0),
-    shareVenta: buy?.share ?? null,
-    shareCompra: sell?.share ?? null,
   };
 }
 
@@ -518,9 +518,7 @@ function chartGeometry(points, width, height) {
   const yOf = (value) => priceBottom - ((Number(value) - low) / (high - low)) * (priceBottom - priceTop);
 
   const maxActivity = withActivity
-    ? Math.max(Number.EPSILON, ...points.map((point) => (enSpread()
-      ? Math.max(point.actVenta || 0, point.actCompra || 0)
-      : (state.side === "venta" ? point.actVenta : point.actCompra) || 0)))
+    ? Math.max(Number.EPSILON, ...points.map((point) => (point.actVenta || 0) + (point.actCompra || 0)))
     : 1;
   const activityBase = height - padBottom;
   const yAct = (value) => activityBase - (value / maxActivity) * activityHeight;
@@ -663,24 +661,22 @@ function renderChart(points) {
   }
 
   if (geo.withActivity) {
-    const barras = enSpread()
-      ? [["actVenta", tone.p2pVenta, -1], ["actCompra", tone.p2pCompra, 1]]
-      : [[state.side === "venta" ? "actVenta" : "actCompra", tone[SIDE_VIEW[state.side].p2p], 0]];
     const slot = (width - 8 - geo.padRight) / Math.max(points.length, 1);
-    const barWidth = clamp(slot * (enSpread() ? 0.4 : 0.78), 0.6, 22);
+    const barWidth = clamp(slot * 0.78, 0.6, 22);
     const activityGroup = svgElement("g");
     points.forEach((point, index) => {
       const x = geo.xOf(index);
-      barras.forEach(([key, color, dir]) => {
+      let accumulated = 0;
+      [["actVenta", tone.p2pVenta], ["actCompra", tone.p2pCompra]].forEach(([key, color]) => {
         const value = point[key];
         if (!value) return;
-        const y = geo.yAct(value);
+        const bottom = geo.yAct(accumulated);
+        accumulated += value;
+        const y = geo.yAct(accumulated);
         activityGroup.append(svgElement("rect", {
-          x: (x + dir * barWidth * 0.55 - barWidth / 2).toFixed(1),
-          y: y.toFixed(1),
-          width: barWidth.toFixed(1),
-          height: Math.max(1.5, geo.activityBase - y).toFixed(1),
-          fill: color, opacity: .5, rx: Math.min(2, barWidth / 3),
+          x: x - barWidth / 2, y,
+          width: barWidth, height: bottom - y,
+          fill: color, opacity: .6,
         }));
       });
     });
@@ -813,13 +809,10 @@ function showTooltip(event) {
     const nombre = traducir(enSpread() ? "Spread P2P" : "Brecha");
     rows.push(`<div class="tip-row"><span>${nombre}</span><b>Bs ${priceFormat.format(gap)} · ${porcentaje((gap / Number(pTco)) * 100)}</b></div>`);
   }
-  if (esPlataforma()) {
-    const lados = enSpread()
-      ? [["Participación · Venta", point.shareVenta], ["Participación · Compra", point.shareCompra]]
-      : [[state.side === "venta" ? "Participación · Venta" : "Participación · Compra", state.side === "venta" ? point.shareVenta : point.shareCompra]];
-    lados.forEach(([clave, share]) => {
-      if (share != null) rows.push(`<div class="tip-row"><span>${traducir(clave)}</span><b>${porcentaje(share)}</b></div>`);
-    });
+  if (state.showActivity && point.actVenta + point.actCompra > 0) {
+    const venta = Math.round(100 * point.actVenta / (point.actVenta + point.actCompra));
+    const compra = 100 - venta;
+    rows.push(`<div class="tip-operaciones"><small>${traducir("Operaciones")}</small><div class="barra-reparto"><i class="venta" style="flex-grow:${venta}"></i><i class="compra" style="flex-grow:${compra}"></i></div><div class="tip-porcentajes"><b class="venta">${traducir("{n} %", { n: integerFormat.format(venta) })}</b><b class="compra">${traducir("{n} %", { n: integerFormat.format(compra) })}</b></div></div>`);
   }
 
   const tooltip = $("#chart-tooltip");
@@ -945,7 +938,7 @@ function renderLegend() {
   activity.type = "button";
   activity.dataset.serie = "activity";
   activity.setAttribute("aria-pressed", String(state.showActivity));
-  activity.innerHTML = `<i class="swatch bar" style="background:${tone[SIDE_VIEW[state.side].p2p]}"></i>${traducir("Actividad relativa")}`;
+  activity.innerHTML = `<i class="swatch bar" style="background:linear-gradient(to top, ${tone.p2pVenta} 50%, ${tone.p2pCompra} 50%)"></i>${traducir("Operaciones")}`;
   host.append(activity);
 
   /* Boton compacto: compara los dos precios P2P entre si. */
