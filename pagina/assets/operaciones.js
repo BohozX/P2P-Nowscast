@@ -41,7 +41,8 @@
     return el;
   };
 
-  let datos = null, ventana = "dia", geo = null, fallo = false;
+  let datos = null, ventana = "dia", rango = "todo", geo = null, fallo = false;
+  const ACUMULADOS = { "30": "acumulado_ultimos_30_cortes", todo: "acumulado_todos_los_cortes" };
 
   function cifras() {
     const u = datos.ultimo_corte;
@@ -73,7 +74,7 @@
   }
 
   function ranking() {
-    const filas = (ventana === "dia" ? datos.ultimo_corte.bancos : datos.acumulado_ultimos_30_cortes)
+    const filas = (ventana === "dia" ? datos.ultimo_corte.bancos : datos[ACUMULADOS[ventana]] || datos.acumulado_ultimos_30_cortes)
       .filter((b) => n(b.monto) > 0)
       .sort((a, b) => n(b.monto) - n(a.monto));
     const max = Math.max(1, ...filas.map((b) => n(b.monto)));
@@ -105,11 +106,16 @@
   function grafico() {
     const svg = $o("#op-chart");
     svg.replaceChildren();
-    const s = datos.serie_diaria;
+    document.querySelectorAll("#op-rango button").forEach((b) => {
+      const activo = b.dataset.rango === rango;
+      b.classList.toggle("active", activo);
+      b.setAttribute("aria-pressed", String(activo));
+    });
+    const s = rango === "30" ? datos.serie_diaria.slice(-30) : datos.serie_diaria;
     if (!s.length) return;
     const ancho = svg.clientWidth || 600, alto = svg.clientHeight || 360;
     svg.setAttribute("viewBox", `0 0 ${ancho} ${alto}`);
-    const pad = { l: 8, r: 58, t: 14, b: 26 };
+    const pad = { l: 8, r: 68, t: 14, b: 26 };
     const altoVol = Math.round(alto * .3);
     const yPrecioFin = alto - pad.b - altoVol - 24;
     const valores = s.flatMap((x) => [n(x.precio_ponderado), n(x.tco)]).filter((v) => v != null);
@@ -190,6 +196,13 @@
     if (!b || !datos) return;
     ventana = b.dataset.ventana;
     ranking();
+  });
+  $o("#op-rango").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-rango]");
+    if (!b || !datos || b.dataset.rango === rango) return;
+    rango = b.dataset.rango;
+    ocultarTip();
+    grafico();
   });
   const svg = $o("#op-chart");
   svg.addEventListener("pointermove", mostrarTip);

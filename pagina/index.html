@@ -29,7 +29,6 @@
           <a href="#noticias" data-i18n="Noticias">Noticias</a>
           <a href="#observado" data-i18n="Observado">Observado</a>
           <a href="#bancos" data-i18n="Bancos">Bancos</a>
-          <a href="#operaciones" data-i18n="Operaciones">Operaciones</a>
           <a href="#reservas" data-i18n="Reservas">Reservas</a>
         </nav>
         <div class="idioma" id="idioma" role="group" aria-label="Idioma" data-i18n-aria="Idioma"><button type="button" data-l="en" aria-pressed="false">EN</button><button type="button" data-l="es" aria-pressed="true">ES</button></div>
@@ -428,7 +427,13 @@
 
           <section class="bloque">
             <div class="grafico-head">
-              <h3 data-i18n="Compras diarias · últimos 30 cortes">Compras diarias · últimos 30 cortes</h3>
+              <h3 data-i18n="Compras diarias">Compras diarias</h3>
+              <div class="mandos">
+                <div class="vista" id="op-rango" role="group" aria-label="Periodo" data-i18n-aria="Periodo">
+                  <button type="button" data-rango="30" aria-pressed="false" data-i18n="30 cortes">30 cortes</button>
+                  <button class="active" type="button" data-rango="todo" aria-pressed="true" data-i18n="Todo">Todo</button>
+                </div>
+              </div>
             </div>
             <div class="legend estatica">
               <span data-i18n="Precio ponderado"><i class="swatch" style="background:var(--celeste)"></i>Precio ponderado</span>
@@ -436,7 +441,7 @@
               <span data-i18n="Monto comprado"><i class="swatch bar" style="background:var(--verde)"></i>Monto comprado</span>
             </div>
             <div class="chart-wrap" id="op-wrap">
-              <svg id="op-chart" role="img" aria-label="Monto comprado por los bancos, precio ponderado y TCO de los últimos 30 cortes" data-i18n-aria="Monto comprado por los bancos, precio ponderado y TCO de los últimos 30 cortes"></svg>
+              <svg id="op-chart" role="img" aria-label="Monto comprado por los bancos, precio ponderado y TCO por corte" data-i18n-aria="Monto comprado por los bancos, precio ponderado y TCO por corte"></svg>
               <div class="chart-tooltip" id="op-tip" hidden></div>
             </div>
           </section>
@@ -448,6 +453,7 @@
                 <div class="vista" id="op-ventana" role="group" aria-label="Período del ranking" data-i18n-aria="Período del ranking">
                   <button class="active" type="button" data-ventana="dia" aria-pressed="true" data-i18n="Último corte">Último corte</button>
                   <button type="button" data-ventana="30" aria-pressed="false" data-i18n="30 cortes">30 cortes</button>
+                  <button type="button" data-ventana="todo" aria-pressed="false" data-i18n="Todo">Todo</button>
                 </div>
               </div>
             </div>
@@ -516,12 +522,12 @@
     <div class="tip-bubble" id="tip-bubble" hidden></div>
 
     <script src="assets/rutas.js?v=2" defer></script>
-    <script src="assets/idioma.js?v=7" defer></script>
+    <script src="assets/idioma.js?v=8" defer></script>
     <script src="assets/desplegable.js?v=1" defer></script>
     <script src="assets/app.js?v=4" defer></script>
     <script src="assets/bancos.js?v=4" defer></script>
     <script src="assets/portada.js?v=3" defer></script>
-    <script src="assets/operaciones.js?v=2" defer></script>
+    <script src="assets/operaciones.js?v=3" defer></script>
     <script src="assets/observado.js?v=2" defer></script>
     <script src="assets/graficos.js?v=2" defer></script>
     <script src="assets/bcb.js?v=3" defer></script>
