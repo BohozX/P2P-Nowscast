@@ -42,14 +42,20 @@ const esDiaria = () => state.frequency === "1d";
 /* Instante que se muestra para un punto. En la resolucion diaria se deja el dia
    tal cual, sin hora y sin correrlo al dia siguiente. */
 function instante(time) {
-  return esDiaria() ? new Date(time) : new Date(time + (FREQ_MS[state.frequency] || 0));
+  return new Date(time + ((esDiaria() || (esMediana() && state.frequency === "5m")) ? 0 : (FREQ_MS[state.frequency] || 0)));
 }
 
 const state = {
   asset: "USDT",
   platform: "total",
+  method: "vwap",
   frequency: "5m",
   rangeDays: 30,
+  repartoRangeDays: 30,
+  dateFrom: "",
+  dateTo: "",
+  dateMin: "",
+  dateMax: "",
   side: "venta",
   showActivity: true,
   rows: [],
@@ -63,8 +69,11 @@ const state = {
 };
 
 const esPlataforma = () => state.platform !== "total";
+const esMediana = () => state.method === "mediana";
+const conActividad = () => !esMediana() && state.showActivity;
 
 function availableFrequencies(asset) {
+  if (esMediana()) return FREQ_OPTIONS.map((option) => option.id);
   return FRECUENCIAS[esPlataforma() ? "plataforma" : "total"][asset];
 }
 
@@ -193,9 +202,20 @@ function restorePreferences() {
   }
   if (Object.hasOwn(FRECUENCIAS.total, saved.asset)) state.asset = saved.asset;
   if (PLATAFORMAS_P2P.some((p) => p.id === saved.platform)) state.platform = saved.platform;
+  if (["vwap", "mediana"].includes(saved.method)) state.method = saved.method;
   const disponibles = availableFrequencies(state.asset);
   state.frequency = disponibles.includes(saved.frequency) ? saved.frequency : disponibles[0];
-  if (allowedRanges.includes(saved.rangeDays)) state.rangeDays = saved.rangeDays;
+  if (allowedRanges.includes(saved.repartoRangeDays)) state.repartoRangeDays = saved.repartoRangeDays;
+  if (allowedRanges.includes(saved.rangeDays)) {
+    state.rangeDays = saved.rangeDays;
+    state.repartoRangeDays = saved.rangeDays;
+  } else if (esMediana() && saved.rangeDays === 0) {
+    state.rangeDays = 0;
+  } else if (esMediana() && saved.rangeDays === null && /^\d{4}-\d{2}-\d{2}$/.test(saved.dateFrom) && /^\d{4}-\d{2}-\d{2}$/.test(saved.dateTo)) {
+    state.rangeDays = null;
+    state.dateFrom = saved.dateFrom;
+    state.dateTo = saved.dateTo;
+  }
   if (Object.hasOwn(SIDE_VIEW, saved.side)) state.side = saved.side;
   if (typeof saved.showActivity === "boolean") state.showActivity = saved.showActivity;
 }
@@ -205,8 +225,12 @@ function savePreferences() {
     window.localStorage.setItem(STORE_KEY, JSON.stringify({
       asset: state.asset,
       platform: state.platform,
+      method: state.method,
       frequency: state.frequency,
       rangeDays: state.rangeDays,
+      repartoRangeDays: state.repartoRangeDays,
+      dateFrom: state.dateFrom,
+      dateTo: state.dateTo,
       side: state.side,
       showActivity: state.showActivity,
     }));
@@ -216,6 +240,93 @@ function savePreferences() {
 }
 
 /* ----------------------------------------------------------------- datos -- */
+
+const dataCache = new Map();
+
+function cachedData(key, load, reload = false) {
+  if (reload) dataCache.delete(key);
+  if (!dataCache.has(key)) {
+    const pending = load().catch((error) => {
+      if (dataCache.get(key) === pending) dataCache.delete(key);
+      throw error;
+    });
+    dataCache.set(key, pending);
+  }
+  return dataCache.get(key);
+}
+
+function loadMedianaFile(asset, frequency, month) {
+  const url = rutaDatos("mediana", asset, frequency, month);
+  return cachedData(url, () => cargarDatos("mediana", [asset, frequency, month]).catch((error) => {
+    if (error.estado) throw Object.assign(new Error(url), { clave: "No se pudo cargar {clave}", valores: { clave: url } });
+    throw error;
+  }));
+}
+
+async function loadMediana(view, token) {
+  const daily = await loadMedianaFile(view.asset, "1d");
+  if (token !== state.token) return null;
+  const firstDate = daily.intervalos[0] || "";
+  const lastDate = daily.intervalos.at(-1) || "";
+  state.dateMin = firstDate;
+  state.dateMax = lastDate;
+  state.dateFrom = firstDate ? clampDate(view.dateFrom || firstDate, firstDate, lastDate) : "";
+  state.dateTo = lastDate ? clampDate(view.dateTo || lastDate, state.dateFrom, lastDate) : "";
+  syncDateControls();
+  if (!firstDate || !daily.actualizado) return { rows: [], asOf: daily.actualizado };
+
+  const step = FREQ_MS[view.frequency];
+  const offset = view.frequency === "5m" || view.frequency === "1d" ? 0 : step;
+  const updated = Date.parse(daily.actualizado);
+  const endTime = view.frequency === "1d"
+    ? Date.parse(`${lastDate}T00:00:00-04:00`)
+    : Math.floor(updated / step) * step + offset;
+  const from = view.rangeDays === null
+    ? Date.parse(`${state.dateFrom}T00:00:00-04:00`)
+    : view.rangeDays === 0 ? -Infinity : endTime - view.rangeDays * 86_400_000;
+  const to = view.rangeDays === null ? Date.parse(`${state.dateTo}T23:59:59.999-04:00`) : endTime;
+  if (view.rangeDays !== null) {
+    state.dateFrom = Number.isFinite(from) ? clampDate(isoBoFormat.format(new Date(from + offset)), firstDate, lastDate) : firstDate;
+    state.dateTo = clampDate(isoBoFormat.format(new Date(to)), state.dateFrom, lastDate);
+    syncDateControls();
+  }
+  let payloads;
+  if (["5m", "15m"].includes(view.frequency)) {
+    const firstMonth = "2026-08";
+    const lastMonth = isoBoFormat.format(new Date(updated)).slice(0, 7);
+    const fromMonth = Number.isFinite(from) ? isoBoFormat.format(new Date(from - offset)).slice(0, 7) : firstMonth;
+    const toMonth = isoBoFormat.format(new Date(to - offset)).slice(0, 7);
+    const months = [];
+    let month = firstMonth > fromMonth ? firstMonth : fromMonth;
+    while (month <= lastMonth && month <= toMonth) {
+      months.push(month);
+      const next = new Date(`${month}-01T12:00:00Z`);
+      next.setUTCMonth(next.getUTCMonth() + 1);
+      month = next.toISOString().slice(0, 7);
+    }
+    payloads = await Promise.all(months.map((month) => loadMedianaFile(view.asset, view.frequency, month)));
+  } else {
+    payloads = [view.frequency === "1d" ? daily : await loadMedianaFile(view.asset, view.frequency)];
+  }
+  if (token !== state.token) return null;
+  const series = view.platform === "total" ? "todas_promedio" : view.platform;
+  const rows = [];
+  payloads.forEach((payload) => {
+    payload.intervalos.forEach((interval, index) => {
+      const time = Date.parse(view.frequency === "1d" ? `${interval}T00:00:00-04:00` : interval);
+      if (time + offset < from || time + offset > to) return;
+      const timestamp = new Date(time).toISOString();
+      const date = isoBoFormat.format(new Date(time));
+      rows.push({ timestamp_utc: timestamp, sides: Object.fromEntries(displaySides.map((side) => [side.key, {
+        timestamp_bo: `${date}T00:00:00-04:00`,
+        vwap_bob: payload[side.slug][series][index],
+      }])) });
+    });
+  });
+  return { rows, asOf: daily.actualizado };
+}
+
+const clampDate = (value, first, last) => value < first ? first : value > last ? last : value;
 
 async function loadSeries(asset, platform, side, frequency) {
   const total = platform === "total";
@@ -398,7 +509,7 @@ function tcoPrevio() {
 }
 
 function renderReparto() {
-  const ventana = state.participacion?.scopes?.[state.platform]?.[String(state.rangeDays)] || null;
+  const ventana = state.participacion?.scopes?.[state.platform]?.[String(state.repartoRangeDays)] || null;
   [["volume", "volume"], ["transactions", "events"]].forEach(([id, campo]) => {
     const venta = ventana?.[campo]?.BUY ?? null;
     const compra = ventana?.[campo]?.SELL ?? null;
@@ -488,7 +599,7 @@ function svgElement(name, attributes = {}) {
 }
 
 function chartGeometry(points, width, height) {
-  const withActivity = state.showActivity;
+  const withActivity = conActividad();
   const padLeft = 8;
   const padRight = 58;
   const padTop = 14;
@@ -603,8 +714,10 @@ function gapShapes(points, geo, upper, lower) {
 function renderChart(points) {
   const svg = $("#market-chart");
   const wrap = $("#chart-wrap");
-  wrap.classList.toggle("no-volume", !state.showActivity);
+  wrap.classList.toggle("no-volume", !conActividad());
   svg.textContent = "";
+  svg.__points = [];
+  svg.__geo = null;
 
   const width = svg.clientWidth || wrap.clientWidth || 600;
   const height = svg.clientHeight || 360;
@@ -809,7 +922,7 @@ function showTooltip(event) {
     const nombre = traducir(enSpread() ? "Spread P2P" : "Brecha");
     rows.push(`<div class="tip-row"><span>${nombre}</span><b>Bs ${priceFormat.format(gap)} · ${porcentaje((gap / Number(pTco)) * 100)}</b></div>`);
   }
-  if (state.showActivity && point.actVenta + point.actCompra > 0) {
+  if (conActividad() && point.actVenta + point.actCompra > 0) {
     const venta = Math.round(100 * point.actVenta / (point.actVenta + point.actCompra));
     const compra = 100 - venta;
     rows.push(`<div class="tip-operaciones"><small>${traducir("Operaciones")}</small><div class="barra-reparto"><i class="venta" style="flex-grow:${venta}"></i><i class="compra" style="flex-grow:${compra}"></i></div><div class="tip-porcentajes"><b class="venta">${traducir("{n} %", { n: integerFormat.format(venta) })}</b><b class="compra">${traducir("{n} %", { n: integerFormat.format(compra) })}</b></div></div>`);
@@ -865,6 +978,8 @@ function showLoading() {
 
   /* la captura anterior no se conserva en pantalla */
   $("#market-chart").textContent = "";
+  $("#market-chart").__points = [];
+  $("#market-chart").__geo = null;
   ["#metric-price-venta", "#metric-price-compra", "#metric-tco",
     "#metric-spread", "#metric-gap", "#metric-volume-venta", "#metric-volume-compra",
     "#metric-transactions-venta", "#metric-transactions-compra"].forEach((id) => {
@@ -934,12 +1049,14 @@ function renderLegend() {
     host.append(button);
   });
 
-  const activity = document.createElement("button");
-  activity.type = "button";
-  activity.dataset.serie = "activity";
-  activity.setAttribute("aria-pressed", String(state.showActivity));
-  activity.innerHTML = `<i class="swatch bar" style="background:linear-gradient(to top, ${tone.p2pVenta} 50%, ${tone.p2pCompra} 50%)"></i>${traducir("Operaciones")}`;
-  host.append(activity);
+  if (!esMediana()) {
+    const activity = document.createElement("button");
+    activity.type = "button";
+    activity.dataset.serie = "activity";
+    activity.setAttribute("aria-pressed", String(state.showActivity));
+    activity.innerHTML = `<i class="swatch bar" style="background:linear-gradient(to top, ${tone.p2pVenta} 50%, ${tone.p2pCompra} 50%)"></i>${traducir("Operaciones")}`;
+    host.append(activity);
+  }
 
   /* Boton compacto: compara los dos precios P2P entre si. */
   const spread = document.createElement("button");
@@ -970,18 +1087,42 @@ const plataformaSel = armarDesplegable(
   },
 );
 
+function syncDateControls() {
+  $("#date-range").hidden = !esMediana();
+  [["#date-from", state.dateFrom], ["#date-to", state.dateTo]].forEach(([id, value]) => {
+    const input = $(id);
+    input.min = state.dateMin;
+    input.max = state.dateMax;
+    input.value = value;
+    input.disabled = !state.dateMin;
+  });
+}
+
 function syncControls() {
   document.documentElement.dataset.asset = state.asset;
   const plataforma = PLATAFORMAS_P2P.find((p) => p.id === state.platform);
   $("#market-label").textContent = esPlataforma() ? `${state.asset} / Bs. · ${plataforma.nombre}` : `${state.asset} / Bs.`;
+  if (esMediana()) $("#market-label").textContent += ` · ${traducir("Mediana")}`;
+  const chartLabel = esMediana() ? "Precio P2P de compra y venta y TCO" : "Precio P2P de compra y venta, TCO y operaciones de venta y compra";
+  $("#market-chart").dataset.i18nAria = chartLabel;
+  $("#market-chart").setAttribute("aria-label", traducir(chartLabel));
+  document.querySelectorAll("#method-selector button").forEach((button) => {
+    const active = button.dataset.method === state.method;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
   document.querySelectorAll("#asset-selector button").forEach((button) => {
     const active = button.dataset.asset === state.asset;
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
   });
   document.querySelectorAll("#range-selector button").forEach((button) => {
-    button.classList.toggle("active", Number(button.dataset.range) === state.rangeDays);
+    const active = Number(button.dataset.range) === state.rangeDays;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+    if (button.dataset.range === "0") button.hidden = !esMediana();
   });
+  syncDateControls();
   plataformaSel.sinc();
   renderFrequencySelector();
   renderLegend();
@@ -994,10 +1135,8 @@ function paint() {
   const rows = state.rows;
   renderMetrics(rows);
 
-  const flat = arrastrarPrecios(
-    downsampleRows(rows, 4000).map(flattenRow),
-    ["p2pVenta", "p2pCompra"],
-  );
+  const sampled = downsampleRows(rows, 4000).map(flattenRow);
+  const flat = esMediana() ? sampled : arrastrarPrecios(sampled, ["p2pVenta", "p2pCompra"]);
   const usable = flat.filter((point) => (
     point.p2pVenta != null || point.p2pCompra != null || point.actVenta || point.actCompra
   ));
@@ -1014,23 +1153,27 @@ function paint() {
 
 async function refresh() {
   const token = ++state.token;
+  const view = { ...state };
   showLoading();
 
   let market = null;
   let official = null;
   let tcoError = false;
 
-  const participacion = loadParticipacion(state.asset).catch(() => null);
+  const participacion = cachedData(rutaDatos("participacion", view.asset), () => loadParticipacion(view.asset), view.method === "vwap").catch(() => null);
   try {
-    market = await loadMarket(state.asset, state.platform, state.frequency);
+    market = view.method === "mediana"
+      ? await loadMediana(view, token)
+      : await loadMarket(view.asset, view.platform, view.frequency);
   } catch (error) {
     if (token !== state.token) return;
     showError(error);
     return;
   }
+  if (token !== state.token) return;
 
   try {
-    official = await loadTco();
+    official = await cachedData(rutaDatos("tco"), loadTco, view.method === "vwap");
   } catch (error) {
     tcoError = true;
   }
@@ -1040,9 +1183,10 @@ async function refresh() {
 
   state.tco = official ? official.map : new Map();
   state.participacion = reparto;
-  state.rows = buildRows(market, state.rangeDays);
+  state.rows = view.method === "mediana" ? market.rows : buildRows(market, view.rangeDays);
+  savePreferences();
 
-  const asOf = market.BUY?.as_of_utc || market.SELL?.as_of_utc || null;
+  const asOf = view.method === "mediana" ? market.asOf : market.BUY?.as_of_utc || market.SELL?.as_of_utc || null;
   state.asOf = asOf;
   state.loading = false;
   $("#refresh-btn").classList.remove("is-busy");
@@ -1090,10 +1234,24 @@ function bindTip() {
 }
 
 function bindEvents() {
+  $("#method-selector").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-method]");
+    if (!button || button.dataset.method === state.method) return;
+    state.method = button.dataset.method;
+    if (!esMediana() && !allowedRanges.includes(state.rangeDays)) state.rangeDays = state.repartoRangeDays;
+    const disponibles = availableFrequencies(state.asset);
+    if (!disponibles.includes(state.frequency)) state.frequency = disponibles[0];
+    savePreferences();
+    syncControls();
+    refresh();
+  });
+
   $("#asset-selector").addEventListener("click", (event) => {
     const button = event.target.closest("button[data-asset]");
     if (!button || button.dataset.asset === state.asset) return;
     state.asset = button.dataset.asset;
+    state.dateMin = "";
+    state.dateMax = "";
     const disponibles = availableFrequencies(state.asset);
     if (!disponibles.includes(state.frequency)) state.frequency = disponibles[0];
     savePreferences();
@@ -1114,11 +1272,30 @@ function bindEvents() {
     const button = event.target.closest("button[data-range]");
     if (!button || button.disabled) return;
     const range = Number(button.dataset.range);
-    if (range === state.rangeDays) return;
+    if (range === state.rangeDays || (!esMediana() && !allowedRanges.includes(range))) return;
     state.rangeDays = range;
+    if (allowedRanges.includes(range)) state.repartoRangeDays = range;
     savePreferences();
     syncControls();
     refresh();
+  });
+
+  ["#date-from", "#date-to"].forEach((id) => {
+    $(id).addEventListener("change", () => {
+      if (!esMediana() || !$(id).value || !state.dateMin) return;
+      const value = clampDate($(id).value, state.dateMin, state.dateMax);
+      if (id === "#date-from") {
+        state.dateFrom = value;
+        if (state.dateTo < value) state.dateTo = value;
+      } else {
+        state.dateTo = value;
+        if (state.dateFrom > value) state.dateFrom = value;
+      }
+      state.rangeDays = null;
+      savePreferences();
+      syncControls();
+      refresh();
+    });
   });
 
   $("#legend").addEventListener("click", (event) => {
@@ -1145,8 +1322,8 @@ function bindEvents() {
     if (!state.loading) paint();
   });
 
-  $("#refresh-btn").addEventListener("click", () => { if (!state.loading) refresh(); });
-  $("#retry-btn").addEventListener("click", () => { if (!state.loading) refresh(); });
+  $("#refresh-btn").addEventListener("click", () => { if (!state.loading) { dataCache.clear(); refresh(); } });
+  $("#retry-btn").addEventListener("click", () => { if (!state.loading) { dataCache.clear(); refresh(); } });
 
   const svg = $("#market-chart");
   svg.addEventListener("pointermove", showTooltip);
@@ -1170,10 +1347,7 @@ function bindEvents() {
     prepararFormatos();
     hideTooltip();
     $("#tip-bubble").hidden = true;
-    plataformaSel.sinc();
-    renderFrequencySelector();
-    renderLegend();
-    rotuloBrecha();
+    syncControls();
     if (state.estado) $("#data-status-text").textContent = state.estado();
     if (state.asOf && $("#status-rel").textContent) $("#status-rel").textContent = relativeLabel(state.asOf);
     if (state.error) $("#error-detail").textContent = textoError(state.error);

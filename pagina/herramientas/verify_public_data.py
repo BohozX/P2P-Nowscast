@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -224,7 +224,144 @@ def _participation(payload, asset):
                 _percentage_group(group, PLATFORMS)
 
 
-def expected_files():
+MEDIANA_ASSETS = ("USDT", "USDC")
+MEDIANA_STEPS = {"5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400}
+MEDIANA_SERIES = ("todas_promedio", "binance", "bybit", "bitget")
+MEDIANA_ROOT_FIELDS = ("activo", "frecuencia", "metodo", "actualizado", "intervalos", "venta", "compra")
+MEDIANA_METHOD = (
+    "mediana de los 5 primeros anuncios de cada plataforma en cada captura de 5 minutos; "
+    "todas_promedio es el promedio simple de las plataformas con dato en cada slot; "
+    "5m publica el valor del slot; las otras frecuencias publican el promedio simple "
+    "de los valores de 5 minutos con dato de cada serie dentro del bloque, solo si el bloque "
+    "tiene al menos 90% de sus capturas: 15m=3 de 3, 30m=6 de 6, 1h=11 de 12, 4h=44 de 48, "
+    "1d=260 de 288; una captura sin anuncios no cuenta como cero; "
+    "bloques intradiarios alineados a la epoca UTC y dias en hora de Bolivia; "
+    "sin captura con dato, nulo; precios redondeados a 4 decimales"
+)
+MEDIANA_BO = timezone(timedelta(hours=-4))
+MEDIANA_MONTH_PATH = re.compile(r"^(USDT|USDC)/mediana/(5m|15m)/(\d{4}-(?:0[1-9]|1[0-2]))\.json$")
+
+
+def _mediana_stamp(value):
+    if not isinstance(value, str):
+        raise ValueError("timestamp de mediana no textual")
+    stamp = datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    if stamp.strftime("%Y-%m-%dT%H:%M:%SZ") != value or stamp.timestamp() % 300:
+        raise ValueError("timestamp de mediana invalido o desalineado")
+    return stamp
+
+
+def _mediana_months(first, last):
+    current = date.fromisoformat(first + "-01")
+    end = date.fromisoformat(last + "-01")
+    while current <= end:
+        yield current.strftime("%Y-%m")
+        current = (current.replace(day=28) + timedelta(days=4)).replace(day=1)
+
+
+def expected_mediana_files(actual):
+    expected = {}
+    for asset in MEDIANA_ASSETS:
+        for frequency in ("30m", "1h", "4h", "1d"):
+            expected[f"{asset}/mediana/{frequency}.json"] = (asset, frequency, None)
+        months = sorted({match.group(3) for path in actual if (match := MEDIANA_MONTH_PATH.fullmatch(path)) and match.group(1) == asset})
+        if months:
+            for month in _mediana_months(months[0], months[-1]):
+                for frequency in ("5m", "15m"):
+                    expected[f"{asset}/mediana/{frequency}/{month}.json"] = (asset, frequency, month)
+    return expected
+
+
+def validate_mediana_payload(payload, asset, frequency, month=None):
+    if not isinstance(payload, dict) or list(payload) != list(MEDIANA_ROOT_FIELDS):
+        raise ValueError("campos raiz de mediana no permitidos o desordenados")
+    if payload["activo"] != asset or payload["frecuencia"] != frequency or payload["metodo"] != MEDIANA_METHOD:
+        raise ValueError("activo, frecuencia o metodo de mediana incorrecto")
+    intervals = payload["intervalos"]
+    if not isinstance(intervals, list):
+        raise ValueError("intervalos de mediana invalidos")
+    updated = _mediana_stamp(payload["actualizado"]) if payload["actualizado"] is not None else None
+    if (updated is None) != (not intervals) or (month is not None and not intervals):
+        raise ValueError("mediana vacia o actualizacion incompatible")
+    previous = None
+    for interval in intervals:
+        if frequency == "1d":
+            if not isinstance(interval, str) or date.fromisoformat(interval).isoformat() != interval:
+                raise ValueError("fecha diaria de mediana invalida")
+            stamp = datetime.combine(date.fromisoformat(interval), datetime.min.time(), MEDIANA_BO)
+        else:
+            stamp = _mediana_stamp(interval)
+        if (stamp.timestamp() - (14400 if frequency == "1d" else 0)) % MEDIANA_STEPS[frequency]:
+            raise ValueError("bloque de mediana desalineado")
+        if previous is not None and (stamp - previous).total_seconds() != MEDIANA_STEPS[frequency]:
+            raise ValueError("intervalos de mediana desordenados o discontinuos")
+        if month is not None and stamp.astimezone(MEDIANA_BO).strftime("%Y-%m") != month:
+            raise ValueError("mes boliviano de mediana incorrecto")
+        if updated is None or stamp > updated:
+            raise ValueError("intervalo de mediana posterior a actualizado")
+        previous = stamp
+    for side in ("venta", "compra"):
+        series = payload[side]
+        if not isinstance(series, dict) or list(series) != list(MEDIANA_SERIES):
+            raise ValueError("series de mediana no permitidas o desordenadas")
+        for numbers in series.values():
+            if not isinstance(numbers, list) or len(numbers) != len(intervals):
+                raise ValueError("longitud de mediana incorrecta")
+            for number in numbers:
+                if number is None:
+                    continue
+                if isinstance(number, bool) or not isinstance(number, (int, float)):
+                    raise ValueError("numero de mediana invalido")
+                parsed = Decimal(str(number))
+                if not parsed.is_finite() or parsed <= 0 or -parsed.as_tuple().exponent > 4:
+                    raise ValueError("numero de mediana fuera de rango o con mas de 4 decimales")
+
+
+def validate_mediana_directory(data_dir, actual=None):
+    if actual is None:
+        actual = {path.relative_to(data_dir).as_posix() for path in data_dir.rglob("*") if path.is_file()}
+    expected = expected_mediana_files(actual)
+    found = {path for path in actual if "mediana" in path.split("/")}
+    if found != set(expected):
+        raise ValueError(f"Archivos de mediana incorrectos. Faltan={sorted(set(expected) - found)}; sobran={sorted(found - set(expected))}")
+    payloads = {}
+    for relative, identity in expected.items():
+        try:
+            payload = json.loads((data_dir / relative).read_text(encoding="utf-8"))
+            validate_mediana_payload(payload, *identity)
+            payloads[identity] = payload
+        except (ValueError, TypeError, KeyError, AttributeError, OverflowError) as error:
+            raise ValueError(f"{relative}: {error}") from error
+    for asset in MEDIANA_ASSETS:
+        group = {identity: payload for identity, payload in payloads.items() if identity[0] == asset}
+        updates = {payload["actualizado"] for payload in group.values()}
+        if len(updates) != 1:
+            raise ValueError(f"{asset}/mediana: actualizaciones distintas")
+        updated = next(iter(updates))
+        slots = [slot for identity, payload in sorted(group.items()) if identity[1] == "5m" for slot in payload["intervalos"]]
+        if updated is None:
+            if slots:
+                raise ValueError(f"{asset}/mediana: meses sin dato")
+            continue
+        if not slots or slots[-1] != updated:
+            raise ValueError(f"{asset}/mediana: faltan meses o ultimo slot")
+        first = _mediana_stamp(slots[0])
+        last = _mediana_stamp(updated)
+        for frequency, step in MEDIANA_STEPS.items():
+            intervals = [slot for identity, payload in sorted(group.items()) if identity[1] == frequency for slot in payload["intervalos"]]
+            if frequency == "1d":
+                start = first.astimezone(MEDIANA_BO).date()
+                end = last.astimezone(MEDIANA_BO).date()
+                wanted = [(start + timedelta(days=index)).isoformat() for index in range((end - start).days + 1)]
+            else:
+                start = int(first.timestamp()) // step * step
+                end = int(last.timestamp()) // step * step
+                wanted = [datetime.fromtimestamp(stamp, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") for stamp in range(start, end + 1, step)]
+            if intervals != wanted:
+                raise ValueError(f"{asset}/mediana/{frequency}: historia discontinua o incompleta")
+
+
+def expected_files(actual=()):
     expected = {}
     for asset, frequencies in FREQUENCIES.items():
         for path_side, side in SIDES.items():
@@ -235,14 +372,16 @@ def expected_files():
                     expected[f"{asset}/{path_side}/plataformas/{platform}/{frequency}.json"] = (asset, side, frequency, platform)
         expected[f"{asset}/participacion.json"] = (asset,)
     expected["USDT/observado/top5.json"] = ()
+    expected.update(expected_mediana_files(actual))
     return expected
 
 
 def verify(data_dir: Path) -> None:
-    expected = expected_files()
     actual = {path.relative_to(data_dir).as_posix() for path in data_dir.rglob("*") if path.is_file()}
+    expected = expected_files(actual)
     if actual != set(expected):
-        raise ValueError(f"Se exigen exactamente 75 JSON. Faltan={sorted(set(expected) - actual)}; sobran={sorted(actual - set(expected))}")
+        raise ValueError(f"Se exigen exactamente {len(expected)} JSON. Faltan={sorted(set(expected) - actual)}; sobran={sorted(actual - set(expected))}")
+    validate_mediana_directory(data_dir, actual)
     platform_groups = {}
     for relative, identity in expected.items():
         try:
@@ -254,6 +393,8 @@ def verify(data_dir: Path) -> None:
                 if identity[3]:
                     key = identity[:3]
                     platform_groups.setdefault(key, {})[identity[3]] = payload["points"]
+            elif len(identity) == 3:
+                continue
             elif identity:
                 _participation(payload, *identity)
             else:
@@ -274,5 +415,6 @@ validate_public_directory = verify
 
 if __name__ == "__main__":
     default_target = Path(__file__).resolve().parents[1] / "data"
-    verify(Path(sys.argv[1]) if len(sys.argv) > 1 else default_target)
-    print("Datos publicos: exactamente 75 JSON v4, sin volumen, conteos, IDs ni RAW.")
+    target = Path(sys.argv[1]) if len(sys.argv) > 1 else default_target
+    verify(target)
+    print(f"Datos publicos: exactamente {len(list(target.rglob('*.json')))} JSON, sin volumen, conteos, IDs ni RAW.")

@@ -134,7 +134,7 @@ h1.grad { animation: brillo 7s ease-in-out infinite alternate; }
 .vista button { height: 30px; padding: 0 11px; font-size: 13px; }
 .vista button:disabled, .vista button[aria-disabled="true"] { opacity: .3; cursor: not-allowed; }
 .vista button[aria-disabled="true"]:hover { color: var(--tinta2); }
-#asset-selector button { min-width: 74px; letter-spacing: .02em; }
+#asset-selector button, #method-selector button { min-width: 74px; letter-spacing: .02em; }
 
 .captura { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 30px; margin: 0 0 clamp(26px, 3.4vw, 40px); font-family: var(--mono); font-size: 12px; color: var(--tinta3); text-align: center; flex-wrap: wrap; }
 .captura > i { width: 7px; height: 7px; border-radius: 50%; background: var(--tinta3); flex: none; }
@@ -198,6 +198,17 @@ h1.grad { animation: brillo 7s ease-in-out infinite alternate; }
 .grafico-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
 .grafico-head h3, .tabla-bloque h3 { font-size: 1.25rem; font-weight: 600; letter-spacing: -.02em; }
 .mandos { display: flex; flex-wrap: wrap; gap: 10px; }
+#market-controls { align-items: center; }
+.date-range { display: flex; align-items: center; gap: 10px; }
+.date-range label { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--tinta3); }
+.date-range input { width: 128px; min-width: 0; height: 36px; padding: 4px 6px; border: 1px solid var(--borde2); border-radius: 8px; background: rgba(255, 255, 255, .03); color: var(--tinta); font: 11px var(--mono); color-scheme: dark; }
+.date-range input:focus { outline: 1px solid var(--verde); border-color: var(--verde); }
+@media (max-width: 640px) {
+  #market-controls { width: 100%; }
+  .date-range { width: 100%; }
+  .date-range label { flex: 1; }
+  .date-range input { flex: 1; width: 0; }
+}
 
 .legend { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 0 0 8px; }
 .legend button { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 11px; border: 0; border-radius: 8px; background: none; font-size: 12.5px; font-weight: 500; color: var(--tinta2); transition: opacity .2s, color .2s, background-color .2s; }

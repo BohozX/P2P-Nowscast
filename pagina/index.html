@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/styles.css?v=7">
+    <link rel="stylesheet" href="assets/styles.css?v=8">
   </head>
   <body>
     <header class="nav">
@@ -82,6 +82,10 @@
               <button class="active" type="button" data-asset="USDT" aria-pressed="true">USDT</button>
               <button type="button" data-asset="USDC" aria-pressed="false">USDC</button>
             </div>
+            <div class="chips" id="method-selector" role="group" aria-label="Método" data-i18n-aria="Método">
+              <button class="active" type="button" data-method="vwap" aria-pressed="true" data-i18n="VWAP">VWAP</button>
+              <button type="button" data-method="mediana" aria-pressed="false" data-i18n="Mediana">Mediana</button>
+            </div>
             <div class="campo"><span class="etq" data-i18n="Plataforma">Plataforma</span><div class="sel" id="plataforma-sel"></div></div>
           </div>
           <p class="captura" id="data-status">
@@ -145,12 +149,17 @@
           <section class="bloque">
             <div class="grafico-head">
               <h3 id="market-label">USDT / Bs.</h3>
-              <div class="mandos">
+              <div class="mandos" id="market-controls">
                 <div class="vista" id="frequency-selector" role="group" aria-label="Resolución" data-i18n-aria="Resolución"></div>
                 <div class="vista" id="range-selector" role="group" aria-label="Periodo" data-i18n-aria="Periodo">
                   <button type="button" data-range="1">24H</button>
                   <button type="button" data-range="7">7D</button>
                   <button class="active" type="button" data-range="30">30D</button>
+                  <button type="button" data-range="0" data-i18n="Todo" hidden>Todo</button>
+                </div>
+                <div class="date-range" id="date-range" hidden>
+                  <label><span data-i18n="Desde">Desde</span><input type="date" id="date-from" aria-label="Desde" data-i18n-aria="Desde"></label>
+                  <label><span data-i18n="Hasta">Hasta</span><input type="date" id="date-to" aria-label="Hasta" data-i18n-aria="Hasta"></label>
                 </div>
               </div>
             </div>
@@ -212,41 +221,6 @@
             </article>
           </div>
           <div class="metricas segunda" id="ob-plataformas" aria-live="polite"></div>
-
-          <section class="bloque">
-            <div class="grafico-head">
-              <h3 data-i18n="Cada 5 minutos">Cada 5 minutos</h3>
-              <div class="mandos">
-                <div class="vista" id="ob-lado" role="group" aria-label="Lado" data-i18n-aria="Lado">
-                  <button class="active" type="button" data-lado="venta" aria-pressed="true" data-i18n="Venta">Venta</button>
-                  <button type="button" data-lado="compra" aria-pressed="false" data-i18n="Compra">Compra</button>
-                </div>
-                <div class="vista" id="ob-rango" role="group" aria-label="Periodo" data-i18n-aria="Periodo">
-                  <button class="active" type="button" data-dias="1" aria-pressed="true">24H</button>
-                  <button type="button" data-dias="7" aria-pressed="false">7D</button>
-                </div>
-              </div>
-            </div>
-            <div class="legend estatica" id="ob-leyenda"></div>
-            <div class="chart-wrap no-volume" id="ob-wrap-5m">
-              <svg class="grafico-linea" id="ob-5m" role="img" aria-label="Precio observado cada 5 minutos por plataforma" data-i18n-aria="Precio observado cada 5 minutos por plataforma"></svg>
-              <div class="chart-tooltip" id="ob-tip-5m" hidden></div>
-            </div>
-          </section>
-
-          <section class="bloque">
-            <div class="grafico-head">
-              <h3 data-i18n="Serie diaria">Serie diaria</h3>
-            </div>
-            <div class="legend estatica">
-              <span data-i18n="P2P Venta"><i class="swatch" style="background:var(--verde)"></i>P2P Venta</span>
-              <span data-i18n="P2P Compra"><i class="swatch" style="background:var(--celeste)"></i>P2P Compra</span>
-            </div>
-            <div class="chart-wrap no-volume" id="ob-wrap-1d">
-              <svg class="grafico-linea" id="ob-1d" role="img" aria-label="Precio observado diario" data-i18n-aria="Precio observado diario"></svg>
-              <div class="chart-tooltip" id="ob-tip-1d" hidden></div>
-            </div>
-          </section>
 
           <p class="aviso-error" id="ob-error" hidden data-i18n="No fue posible cargar el precio observado.">No fue posible cargar el precio observado.</p>
           <p class="fuente" data-i18n="Fuente: Binance P2P, Bybit P2P y Bitget P2P. Mediana de los cinco primeros anuncios de cada plataforma en cada captura de 5 minutos">Fuente: Binance P2P, Bybit P2P y Bitget P2P. Mediana de los cinco primeros anuncios de cada plataforma en cada captura de 5 minutos</p>
@@ -512,14 +486,14 @@
 
     <div class="tip-bubble" id="tip-bubble" hidden></div>
 
-    <script src="assets/rutas.js?v=2" defer></script>
-    <script src="assets/idioma.js?v=9" defer></script>
+    <script src="assets/rutas.js?v=3" defer></script>
+    <script src="assets/idioma.js?v=10" defer></script>
     <script src="assets/desplegable.js?v=1" defer></script>
-    <script src="assets/app.js?v=4" defer></script>
+    <script src="assets/app.js?v=5" defer></script>
     <script src="assets/bancos.js?v=4" defer></script>
     <script src="assets/portada.js?v=3" defer></script>
     <script src="assets/operaciones.js?v=3" defer></script>
-    <script src="assets/observado.js?v=2" defer></script>
+    <script src="assets/observado.js?v=3" defer></script>
     <script src="assets/graficos.js?v=2" defer></script>
     <script src="assets/bcb.js?v=3" defer></script>
     <script src="assets/noticias.js?v=3" defer></script>

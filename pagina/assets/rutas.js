@@ -4,6 +4,7 @@ const RUTAS_DATOS = {
   prueba: {
     p2p: (activo, lado, frecuencia) => `data/${activo}/${lado}/${frecuencia}.json`,
     plataforma: (activo, lado, plataforma, frecuencia) => `data/${activo}/${lado}/plataformas/${plataforma}/${frecuencia}.json`,
+    mediana: (activo, frecuencia, mes) => mes ? `data/${activo}/mediana/${frecuencia}/${mes}.json` : `data/${activo}/mediana/${frecuencia}.json`,
     participacion: (activo) => `data/${activo}/participacion.json`,
     top5: () => "datos-mc/top5.json",
     operaciones: () => "datos-mc/bancos_bcb.json",
@@ -15,6 +16,7 @@ const RUTAS_DATOS = {
   produccion: {
     p2p: (activo, lado, frecuencia) => `data/${activo}/${lado}/${frecuencia}.json`,
     plataforma: (activo, lado, plataforma, frecuencia) => `data/${activo}/${lado}/plataformas/${plataforma}/${frecuencia}.json`,
+    mediana: (activo, frecuencia, mes) => mes ? `data/${activo}/mediana/${frecuencia}/${mes}.json` : `data/${activo}/mediana/${frecuencia}.json`,
     participacion: (activo) => `data/${activo}/participacion.json`,
     top5: () => "data/USDT/observado/top5.json",
     operaciones: () => "https://bohozx.github.io/Mercado-Cambiario/bancos_bcb.json",
