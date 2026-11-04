@@ -10,7 +10,7 @@ from typing import Any
 
 
 FREQUENCIES = {"USDT": ("5m", "15m", "30m", "1h", "4h", "1d"), "USDC": ("1h", "4h", "1d")}
-PLATFORM_FREQUENCIES = {"USDT": ("5m", "15m", "1h", "1d"), "USDC": ("1h", "1d")}
+PLATFORM_FREQUENCIES = {"USDT": ("5m", "15m", "30m", "1h", "4h", "1d"), "USDC": ("1h", "4h", "1d")}
 PLATFORMS = ("binance", "bybit", "bitget")
 SIDES = {"compra": "BUY", "venta": "SELL"}
 ROOT_FIELDS = {
@@ -242,7 +242,7 @@ def verify(data_dir: Path) -> None:
     expected = expected_files()
     actual = {path.relative_to(data_dir).as_posix() for path in data_dir.rglob("*") if path.is_file()}
     if actual != set(expected):
-        raise ValueError(f"Se exigen exactamente 57 JSON. Faltan={sorted(set(expected) - actual)}; sobran={sorted(actual - set(expected))}")
+        raise ValueError(f"Se exigen exactamente 75 JSON. Faltan={sorted(set(expected) - actual)}; sobran={sorted(actual - set(expected))}")
     platform_groups = {}
     for relative, identity in expected.items():
         try:
@@ -275,4 +275,4 @@ validate_public_directory = verify
 if __name__ == "__main__":
     default_target = Path(__file__).resolve().parents[1] / "data"
     verify(Path(sys.argv[1]) if len(sys.argv) > 1 else default_target)
-    print("Datos publicos: exactamente 57 JSON v4, sin volumen, conteos, IDs ni RAW.")
+    print("Datos publicos: exactamente 75 JSON v4, sin volumen, conteos, IDs ni RAW.")
