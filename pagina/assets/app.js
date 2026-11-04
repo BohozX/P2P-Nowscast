@@ -925,7 +925,7 @@ function showTooltip(event) {
   if (conActividad() && point.actVenta + point.actCompra > 0) {
     const venta = Math.round(100 * point.actVenta / (point.actVenta + point.actCompra));
     const compra = 100 - venta;
-    rows.push(`<div class="tip-operaciones"><small>${traducir("Operaciones")}</small><div class="barra-reparto"><i class="venta" style="flex-grow:${venta}"></i><i class="compra" style="flex-grow:${compra}"></i></div><div class="tip-porcentajes"><b class="venta">${traducir("{n} %", { n: integerFormat.format(venta) })}</b><b class="compra">${traducir("{n} %", { n: integerFormat.format(compra) })}</b></div></div>`);
+    rows.push(`<div class="tip-operaciones"><small>${traducir("Volumen transado")}</small><div class="barra-reparto"><i class="venta" style="flex-grow:${venta}"></i><i class="compra" style="flex-grow:${compra}"></i></div><div class="tip-porcentajes"><b class="venta">${traducir("{n} %", { n: integerFormat.format(venta) })}</b><b class="compra">${traducir("{n} %", { n: integerFormat.format(compra) })}</b></div></div>`);
   }
 
   const tooltip = $("#chart-tooltip");
@@ -1054,7 +1054,7 @@ function renderLegend() {
     activity.type = "button";
     activity.dataset.serie = "activity";
     activity.setAttribute("aria-pressed", String(state.showActivity));
-    activity.innerHTML = `<i class="swatch bar" style="background:linear-gradient(to top, ${tone.p2pVenta} 50%, ${tone.p2pCompra} 50%)"></i>${traducir("Operaciones")}`;
+    activity.innerHTML = `<i class="swatch bar" style="background:linear-gradient(to top, ${tone.p2pVenta} 50%, ${tone.p2pCompra} 50%)"></i>${traducir("Volumen")}`;
     host.append(activity);
   }
 
@@ -1103,7 +1103,7 @@ function syncControls() {
   const plataforma = PLATAFORMAS_P2P.find((p) => p.id === state.platform);
   $("#market-label").textContent = esPlataforma() ? `${state.asset} / Bs. · ${plataforma.nombre}` : `${state.asset} / Bs.`;
   if (esMediana()) $("#market-label").textContent += ` · ${traducir("Mediana")}`;
-  const chartLabel = esMediana() ? "Precio P2P de compra y venta y TCO" : "Precio P2P de compra y venta, TCO y operaciones de venta y compra";
+  const chartLabel = esMediana() ? "Precio P2P de compra y venta y TCO" : "Precio P2P de compra y venta, TCO y volumen de venta y compra";
   $("#market-chart").dataset.i18nAria = chartLabel;
   $("#market-chart").setAttribute("aria-label", traducir(chartLabel));
   document.querySelectorAll("#method-selector button").forEach((button) => {
