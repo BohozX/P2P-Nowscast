@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/styles.css?v=8">
+    <link rel="stylesheet" href="assets/styles.css?v=10">
   </head>
   <body>
     <header class="nav">
@@ -27,7 +27,7 @@
         <nav class="nav-links" aria-label="Secciones" data-i18n-aria="Secciones">
           <a href="#p2p" data-i18n="Mercado P2P">Mercado P2P</a>
           <a href="#noticias" data-i18n="Noticias">Noticias</a>
-          <a href="#observado" data-i18n="Observado">Observado</a>
+          <a href="#observado" data-i18n="Histórico">Histórico</a>
           <a href="#bancos" data-i18n="Bancos">Bancos</a>
           <a href="#reservas" data-i18n="Reservas">Reservas</a>
         </nav>
@@ -82,9 +82,9 @@
               <button class="active" type="button" data-asset="USDT" aria-pressed="true">USDT</button>
               <button type="button" data-asset="USDC" aria-pressed="false">USDC</button>
             </div>
-            <div class="chips" id="method-selector" role="group" aria-label="Método" data-i18n-aria="Método">
-              <button class="active" type="button" data-method="vwap" aria-pressed="true" data-i18n="VWAP">VWAP</button>
-              <button type="button" data-method="mediana" aria-pressed="false" data-i18n="Mediana">Mediana</button>
+            <div class="chips" id="method-selector" data-method="vwap" role="group" aria-label="Método" data-i18n-aria="Método">
+              <button class="active" type="button" data-method="vwap" aria-pressed="true" data-i18n="Ejecutado" title="Precio promedio ponderado por volumen (VWAP) de las operaciones" data-i18n-title="Precio promedio ponderado por volumen (VWAP) de las operaciones">Ejecutado</button>
+              <button type="button" data-method="mediana" aria-pressed="false" data-i18n="Anunciado" title="Mediana de los cinco primeros anuncios" data-i18n-title="Mediana de los cinco primeros anuncios">Anunciado</button>
             </div>
             <div class="campo"><span class="etq" data-i18n="Plataforma">Plataforma</span><div class="sel" id="plataforma-sel"></div></div>
           </div>
@@ -193,42 +193,10 @@
       <section class="sec" id="observado">
         <div class="env">
           <div class="sec-cab">
-            <p class="kicker" data-i18n="Top 5 de anuncios · USDT">Top 5 de anuncios · USDT</p>
-            <h2 class="grad" data-i18n="Precio observado">Precio observado</h2>
+            <p class="kicker" data-i18n="USDT · Binance P2P">USDT · Binance P2P</p>
+            <h2 class="grad" id="historico-titulo"></h2>
           </div>
-          <p class="captura" id="ob-hora" data-i18n="Cargando">Cargando</p>
-
-          <div class="metricas" aria-live="polite">
-            <article class="metrica acento-venta">
-              <span class="metric-title" data-i18n="P2P Venta · Bs.">P2P Venta · Bs.</span>
-              <strong id="ob-venta">—</strong>
-              <span class="metric-note" data-i18n="promedio de las tres plataformas">promedio de las tres plataformas</span>
-            </article>
-            <article class="metrica acento-compra">
-              <span class="metric-title" data-i18n="P2P Compra · Bs.">P2P Compra · Bs.</span>
-              <strong id="ob-compra">—</strong>
-              <span class="metric-note" data-i18n="promedio de las tres plataformas">promedio de las tres plataformas</span>
-            </article>
-            <article class="metrica">
-              <span class="metric-title" data-i18n="Venta − Compra · Bs.">Venta − Compra · Bs.</span>
-              <strong id="ob-dif">—</strong>
-              <span class="metric-note" id="ob-dif-nota"></span>
-            </article>
-            <article class="metrica">
-              <span class="metric-title" data-i18n="Más barata para comprar">Más barata para comprar</span>
-              <strong class="nombre" id="ob-barata">—</strong>
-              <span class="metric-note" id="ob-barata-nota"></span>
-            </article>
-          </div>
-          <div class="metricas segunda" id="ob-plataformas" aria-live="polite"></div>
-
-          <p class="aviso-error" id="ob-error" hidden data-i18n="No fue posible cargar el precio observado.">No fue posible cargar el precio observado.</p>
-          <p class="fuente" data-i18n="Fuente: Binance P2P, Bybit P2P y Bitget P2P. Mediana de los cinco primeros anuncios de cada plataforma en cada captura de 5 minutos">Fuente: Binance P2P, Bybit P2P y Bitget P2P. Mediana de los cinco primeros anuncios de cada plataforma en cada captura de 5 minutos</p>
-
           <section class="bloque">
-            <div class="grafico-head">
-              <h3 id="historico-titulo"></h3>
-            </div>
             <div class="legend estatica">
               <span data-i18n="P2P Venta"><i class="swatch" style="background:var(--verde)"></i>P2P Venta</span>
               <span data-i18n="P2P Compra"><i class="swatch" style="background:var(--celeste)"></i>P2P Compra</span>
@@ -254,22 +222,11 @@
           <p class="captura" id="bancos-consulta"></p>
           <p class="aviso-error" id="bancos-error" hidden data-i18n="No fue posible obtener las cotizaciones de las entidades financieras.">No fue posible obtener las cotizaciones de las entidades financieras.</p>
 
-          <section class="bloque pizarra" id="pizarra" hidden>
-            <div class="grafico-head">
-              <h3 data-i18n="La pizarra, ahora">La pizarra, ahora</h3>
-            </div>
-            <div class="pz-extremos">
-              <div class="pz-extremo barato"><span data-i18n="Más barato">Más barato</span><strong id="pz-barato">—</strong><em id="pz-barato-de"></em></div>
-              <div class="pz-extremo caro"><span data-i18n="Más caro">Más caro</span><strong id="pz-caro">—</strong><em id="pz-caro-de"></em></div>
-            </div>
-            <div class="pz-escala" id="pz-escala"></div>
-          </section>
-
-          <div class="selector-centro tras-bloque" id="bancos-campo">
+          <div class="selector-centro" id="bancos-campo">
             <div class="campo campo-banco"><span class="etq" data-i18n="Entidad">Entidad</span><div class="sel" id="bancos-selector"></div></div>
           </div>
 
-          <div class="metricas tres" aria-live="polite">
+          <div class="metricas dos" aria-live="polite">
             <article class="metrica acento-venta">
               <span class="metric-title" data-i18n="Banco Venta · Bs.">Banco Venta · Bs.</span>
               <strong id="banco-venta">—</strong>
@@ -279,11 +236,6 @@
               <span class="metric-title" data-i18n="Banco Compra · Bs.">Banco Compra · Bs.</span>
               <strong id="banco-compra">—</strong>
               <span class="delta" id="banco-delta-compra">—</span>
-            </article>
-            <article class="metrica">
-              <span class="metric-title" data-i18n="TCO · Bs.">TCO · Bs.<em class="stamp" id="banco-tco-stamp"></em></span>
-              <strong id="banco-tco">—</strong>
-              <span class="metric-note">Banco Central de Bolivia</span>
             </article>
           </div>
           <div class="metricas segunda tres" aria-live="polite">
@@ -390,9 +342,13 @@
             </article>
           </div>
 
+          <div class="selector-centro op-campo" id="op-campo" hidden>
+            <div class="campo campo-banco"><span class="etq" data-i18n="Entidad">Entidad</span><div class="sel" id="op-entidad"></div></div>
+          </div>
+
           <section class="bloque">
             <div class="grafico-head">
-              <h3 data-i18n="Compras diarias">Compras diarias</h3>
+              <h3 id="op-titulo">Compras diarias</h3>
               <div class="mandos">
                 <div class="vista" id="op-rango" role="group" aria-label="Periodo" data-i18n-aria="Periodo">
                   <button type="button" data-rango="30" aria-pressed="false" data-i18n="30 cortes">30 cortes</button>
@@ -401,7 +357,7 @@
               </div>
             </div>
             <div class="legend estatica">
-              <span data-i18n="Precio ponderado"><i class="swatch" style="background:var(--celeste)"></i>Precio ponderado</span>
+              <span id="op-ley-precio" hidden data-i18n="Precio ponderado"><i class="swatch" style="background:var(--celeste)"></i>Precio ponderado</span>
               <span data-i18n="TCO"><i class="swatch dash" style="color:var(--tco)"></i>TCO</span>
               <span data-i18n="Monto comprado"><i class="swatch bar" style="background:var(--verde)"></i>Monto comprado</span>
             </div>
@@ -486,14 +442,13 @@
 
     <div class="tip-bubble" id="tip-bubble" hidden></div>
 
-    <script src="assets/rutas.js?v=3" defer></script>
-    <script src="assets/idioma.js?v=11" defer></script>
+    <script src="assets/rutas.js?v=4" defer></script>
+    <script src="assets/idioma.js?v=13" defer></script>
     <script src="assets/desplegable.js?v=1" defer></script>
-    <script src="assets/app.js?v=6" defer></script>
-    <script src="assets/bancos.js?v=4" defer></script>
+    <script src="assets/app.js?v=7" defer></script>
+    <script src="assets/bancos.js?v=5" defer></script>
     <script src="assets/portada.js?v=3" defer></script>
-    <script src="assets/operaciones.js?v=3" defer></script>
-    <script src="assets/observado.js?v=3" defer></script>
+    <script src="assets/operaciones.js?v=4" defer></script>
     <script src="assets/graficos.js?v=2" defer></script>
     <script src="assets/bcb.js?v=3" defer></script>
     <script src="assets/noticias.js?v=3" defer></script>

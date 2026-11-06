@@ -1102,10 +1102,11 @@ function syncControls() {
   document.documentElement.dataset.asset = state.asset;
   const plataforma = PLATAFORMAS_P2P.find((p) => p.id === state.platform);
   $("#market-label").textContent = esPlataforma() ? `${state.asset} / Bs. · ${plataforma.nombre}` : `${state.asset} / Bs.`;
-  if (esMediana()) $("#market-label").textContent += ` · ${traducir("Mediana")}`;
+  if (esMediana()) $("#market-label").textContent += ` · ${traducir("Anunciado")}`;
   const chartLabel = esMediana() ? "Precio P2P de compra y venta y TCO" : "Precio P2P de compra y venta, TCO y volumen de venta y compra";
   $("#market-chart").dataset.i18nAria = chartLabel;
   $("#market-chart").setAttribute("aria-label", traducir(chartLabel));
+  $("#method-selector").dataset.method = state.method;
   document.querySelectorAll("#method-selector button").forEach((button) => {
     const active = button.dataset.method === state.method;
     button.classList.toggle("active", active);

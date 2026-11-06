@@ -41,8 +41,46 @@
     return el;
   };
 
-  let datos = null, ventana = "dia", rango = "todo", geo = null, fallo = false;
+  let datos = null, ventana = "dia", rango = "todo", entidad = "todos", geo = null, fallo = false, selector = null;
   const ACUMULADOS = { "30": "acumulado_ultimos_30_cortes", todo: "acumulado_todos_los_cortes" };
+  const historiaDe = (banco) => datos?.historia_por_banco?.find((b) => b.banco === banco) || null;
+
+  function serie() {
+    const base = rango === "30" ? datos.serie_diaria.slice(-30) : datos.serie_diaria;
+    const h = historiaDe(entidad);
+    if (!h) return base.map((p) => ({ fecha_corte: p.fecha_corte, tco: p.tco, monto: p.monto_total, numero_operaciones: p.numero_operaciones, precio_ponderado: null }));
+    const cortes = new Map(h.cortes.map((c) => [c.fecha_corte, c]));
+    return base.map((p) => {
+      const c = cortes.get(p.fecha_corte);
+      return { fecha_corte: p.fecha_corte, tco: p.tco, monto: c?.monto ?? null, numero_operaciones: c?.numero_operaciones ?? null, precio_ponderado: c?.precio_ponderado ?? null, sinCompras: !c };
+    });
+  }
+
+  function elegir(banco) {
+    entidad = historiaDe(banco) ? banco : "todos";
+    selector?.sinc();
+    ocultarTip();
+    grafico();
+    marcarRanking();
+  }
+
+  function armarSelector() {
+    const lista = datos.historia_por_banco;
+    $o("#op-campo").hidden = !lista?.length;
+    if (!lista?.length) return;
+    if (!historiaDe(entidad)) entidad = "todos";
+    if (selector) { selector.sinc(); return; }
+    selector = armarDesplegable(
+      $o("#op-entidad"),
+      () => [["todos", traducir("Todos los bancos"), '<i class="sel-punto todas"></i>'], ...datos.historia_por_banco.map((b) => [b.banco, nombre(b.banco)])],
+      () => entidad,
+      elegir,
+    );
+  }
+
+  function marcarRanking() {
+    document.querySelectorAll("#op-ranking li[data-banco]").forEach((li) => li.classList.toggle("activa", li.dataset.banco === entidad));
+  }
 
   function cifras() {
     const u = datos.ultimo_corte;
@@ -81,7 +119,8 @@
     const host = $o("#op-ranking");
     host.replaceChildren(...filas.map((b) => {
       const li = document.createElement("li");
-      const celda = (clase, texto) => { const s = document.createElement("span"); s.className = clase; s.textContent = texto; return s; };
+      if (historiaDe(b.banco)) li.dataset.banco = b.banco;
+      const celda =(clase, texto) => { const s = document.createElement("span"); s.className = clase; s.textContent = texto; return s; };
       const barra = document.createElement("span");
       barra.className = "b";
       const i = document.createElement("i");
@@ -96,6 +135,7 @@
       );
       return li;
     }));
+    marcarRanking();
     document.querySelectorAll("#op-ventana button").forEach((b) => {
       const activo = b.dataset.ventana === ventana;
       b.classList.toggle("active", activo);
@@ -111,7 +151,10 @@
       b.classList.toggle("active", activo);
       b.setAttribute("aria-pressed", String(activo));
     });
-    const s = rango === "30" ? datos.serie_diaria.slice(-30) : datos.serie_diaria;
+    const conBanco = entidad !== "todos";
+    poner("op-titulo", conBanco ? `${traducir("Compras diarias")} · ${nombre(entidad)}` : traducir("Compras diarias"));
+    $o("#op-ley-precio").hidden = !conBanco;
+    const s = serie();
     if (!s.length) return;
     const ancho = svg.clientWidth || 600, alto = svg.clientHeight || 360;
     svg.setAttribute("viewBox", `0 0 ${ancho} ${alto}`);
@@ -124,7 +167,7 @@
     const paso = (ancho - pad.l - pad.r) / s.length;
     const x = (i) => pad.l + paso * (i + .5);
     const y = (v) => yPrecioFin - ((v - lo) / (hi - lo)) * (yPrecioFin - pad.t);
-    const maxVol = Math.max(1, ...s.map((p) => n(p.monto_total) || 0));
+    const maxVol = Math.max(1, ...s.map((p) => n(p.monto) || 0));
     const base = alto - pad.b;
     const yv = (v) => base - (v / maxVol) * altoVol;
 
@@ -137,7 +180,8 @@
     const ancho_b = Math.max(2, Math.min(26, paso * .62));
     const barras = nodo("g", { fill: "var(--verde)", opacity: .55 }, svg);
     s.forEach((p, i) => {
-      const v = n(p.monto_total) || 0;
+      const v = n(p.monto) || 0;
+      if (!v) return;
       nodo("rect", { x: (x(i) - ancho_b / 2).toFixed(1), y: yv(v).toFixed(1), width: ancho_b.toFixed(1), height: Math.max(1.5, base - yv(v)).toFixed(1), rx: 2 }, barras);
     });
     nodo("line", { x1: 0, x2: ancho - pad.r + 4, y1: base, y2: base, stroke: "rgba(255,255,255,.12)" }, svg);
@@ -145,7 +189,13 @@
 
     const linea = (clave, attrs) => {
       let d = "";
-      s.forEach((p, i) => { const v = n(p[clave]); if (v == null) return; d += `${d ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)} `; });
+      let corte = true;
+      s.forEach((p, i) => {
+        const v = n(p[clave]);
+        if (v == null) { corte = true; return; }
+        d += `${corte ? "M" : "L"}${x(i).toFixed(1)} ${y(v).toFixed(1)} `;
+        corte = false;
+      });
       if (d) nodo("path", { d, fill: "none", "stroke-linecap": "round", "stroke-linejoin": "round", ...attrs }, svg);
     };
     linea("tco", { stroke: "var(--tco)", "stroke-width": 1.8, "stroke-dasharray": "7 4" });
@@ -176,11 +226,14 @@
     cursor.setAttribute("visibility", "visible");
     const fila = (et, v, color) => `<div class="tip-row"><span>${color ? `<i class="dot" style="background:${color}"></i>` : ""}${et}</span><b>${v}</b></div>`;
     const tip = $o("#op-tip");
+    const tco = n(p.tco) == null ? "—" : `Bs ${precio.format(n(p.tco))}`;
     tip.innerHTML = `<h4>${traducir("Corte {fecha}", { fecha: diaLargo.format(fecha(p.fecha_corte)) })}</h4>`
-      + fila(traducir("Precio ponderado"), `Bs ${precio.format(n(p.precio_ponderado))}`, "var(--celeste)")
-      + fila(traducir("TCO"), `Bs ${precio.format(n(p.tco))}`, "var(--tco)")
-      + fila(traducir("Monto comprado"), `${usd.format(n(p.monto_total))} USD`, "var(--verde)")
-      + fila(traducir("Operaciones"), entero.format(n(p.numero_operaciones)));
+      + (p.sinCompras
+        ? fila(traducir("TCO"), tco, "var(--tco)") + `<div class="tip-row"><span>${traducir("Sin compras en este corte")}</span></div>`
+        : (p.precio_ponderado != null ? fila(traducir("Precio ponderado"), `Bs ${precio.format(n(p.precio_ponderado))}`, "var(--celeste)") : "")
+          + fila(traducir("TCO"), tco, "var(--tco)")
+          + fila(traducir("Monto comprado"), `${usd.format(n(p.monto))} USD`, "var(--verde)")
+          + fila(traducir("Operaciones"), entero.format(n(p.numero_operaciones))));
     tip.hidden = false;
     const w = $o("#op-wrap").clientWidth;
     tip.style.left = `${Math.min(Math.max(4, geo.x(i) + 14), Math.max(4, w - tip.offsetWidth - 4))}px`;
@@ -196,6 +249,12 @@
     if (!b || !datos) return;
     ventana = b.dataset.ventana;
     ranking();
+  });
+  $o("#op-ranking").addEventListener("click", (ev) => {
+    const li = ev.target.closest("li[data-banco]");
+    if (!li || !datos) return;
+    elegir(li.dataset.banco === entidad ? "todos" : li.dataset.banco);
+    $o("#op-campo").scrollIntoView({ behavior: "smooth", block: "start" });
   });
   $o("#op-rango").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-rango]");
@@ -214,10 +273,10 @@
   addEventListener("idiomachange", () => {
     prepararFormatos();
     ocultarTip();
-    if (datos) { cifras(); grafico(); ranking(); } else if (fallo) poner("op-corte", "");
+    if (datos) { cifras(); armarSelector(); grafico(); ranking(); } else if (fallo) poner("op-corte", "");
   });
 
   cargarDatos("operaciones")
-    .then((d) => { datos = d; cifras(); grafico(); ranking(); })
+    .then((d) => { datos = d; cifras(); armarSelector(); grafico(); ranking(); })
     .catch(() => { fallo = true; $o("#op-error").hidden = false; poner("op-corte", ""); });
 })();

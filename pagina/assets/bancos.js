@@ -44,7 +44,7 @@
   prepararFormatos();
   const fmtIso = new Intl.DateTimeFormat("en-CA", { timeZone: zona, year: "numeric", month: "2-digit", day: "2-digit" });
 
-  const estado = { banco: null, dias: 7, lado: "venta", bancos: [], tco: new Map(), fin: null, inicio: null, p2pVenta: null, cargando: false, geo: null };
+  const estado = { banco: null, dias: 7, lado: "venta", bancos: [], tco: new Map(), fin: null, inicio: null, cargando: false, geo: null };
   const $b = (sel) => document.querySelector(sel);
   const NS = "http://www.w3.org/2000/svg";
 
@@ -234,9 +234,6 @@
     $b("#banco-compra").classList.toggle("sin-dato", !banco.tieneCompra);
     delta("#banco-delta-venta", actual?.venta, inicial?.venta);
     delta("#banco-delta-compra", actual?.compra, inicial?.compra);
-
-    texto("#banco-tco", tco != null ? fmtEje.format(tco) : "—");
-    texto("#banco-tco-stamp", tco != null ? fmtDia.format(new Date(t1)) : "");
 
     const brechaV = actual?.venta != null && tco != null ? actual.venta - tco : null;
     texto("#banco-brecha-venta", brechaV == null ? "—" : fmtDif.format(brechaV));
@@ -451,13 +448,14 @@
     const c = document.createElement("span");
     c.className = "c";
     c.textContent = actual.compra == null ? "—" : precio(actual.compra);
-    if (previo && previo.venta != null && actual.venta != null && previo.venta !== actual.venta) {
+    [[v, "venta"], [c, "compra"]].forEach(([el, lado]) => {
+      if (!previo || previo[lado] == null || actual[lado] == null || previo[lado] === actual[lado]) return;
       const f = document.createElement("i");
-      f.className = actual.venta > previo.venta ? "sube" : "baja";
-      f.textContent = actual.venta > previo.venta ? "▲" : "▼";
-      v.prepend(f);
+      f.className = actual[lado] > previo[lado] ? "sube" : "baja";
+      f.textContent = actual[lado] > previo[lado] ? "▲" : "▼";
+      el.prepend(f);
       td.classList.add("cambio");
-    }
+    });
     td.append(v, c);
     return td;
   }
@@ -559,113 +557,11 @@
       : traducir("Mediana de {n} bancos: {lista}", { n: precios.length, lista: lista(m.bajo) });
   }
 
-  function tipBanco(banco, valor, tco, p2p) {
-    let t = `${banco.largo} · ${precio(valor)}`;
-    if (tco != null) t += traducir(" · {dif} frente al TCO", { dif: fmtDif.format(valor - tco) });
-    if (p2p != null) t += traducir(" · {dif} frente a P2P Venta", { dif: fmtDif.format(valor - p2p) });
-    return t;
-  }
-
-  function ajustarEjePizarra() {
-    const escala = $b("#pz-escala");
-    const pista = escala.querySelector(".pz-refs");
-    if (!pista || !pista.clientWidth) return;
-    const ancho = pista.clientWidth;
-    const etiquetas = [...pista.querySelectorAll(".pz-etiqueta")];
-    const alinear = (el) => {
-      const posicion = (parseFloat(el.style.left) / 100) * ancho;
-      const desplazamiento = Math.max(-posicion, Math.min(-el.offsetWidth / 2, ancho - posicion - el.offsetWidth));
-      el.style.transform = `translateX(${desplazamiento.toFixed(1)}px)`;
-      el.style.setProperty("--pz-origen", `${(-desplazamiento).toFixed(1)}px`);
-    };
-    const chocan = (a, b) => a.left < b.right + 8 && a.right + 8 > b.left;
-    escala.classList.remove("con-referencia-arriba");
-    etiquetas.forEach((el) => {
-      el.classList.remove("arriba");
-      alinear(el);
-    });
-    if (etiquetas.length === 2) {
-      const distancia = Math.abs(parseFloat(etiquetas[0].style.left) - parseFloat(etiquetas[1].style.left)) * ancho / 100;
-      if (distancia < 90 || chocan(etiquetas[0].getBoundingClientRect(), etiquetas[1].getBoundingClientRect())) {
-        etiquetas[1].classList.add("arriba");
-        escala.classList.add("con-referencia-arriba");
-      }
-    }
-    const ocupadas = etiquetas.filter((el) => !el.classList.contains("arriba")).map((el) => el.getBoundingClientRect());
-    escala.querySelectorAll(".pz-marca").forEach((el) => {
-      el.hidden = false;
-      alinear(el);
-      const caja = el.getBoundingClientRect();
-      el.hidden = ocupadas.some((otra) => chocan(caja, otra));
-      if (!el.hidden) ocupadas.push(caja);
-    });
-  }
-
-  function pizarra() {
-    const caja = $b("#pizarra");
-    const precios = preciosAhora();
-    caja.hidden = !precios.length;
-    if (!precios.length) return;
-    const tco = tcoDe(estado.fin);
-    const p2p = estado.p2pVenta;
-    const barato = precios[0].valor;
-    const caro = precios.at(-1).valor;
-    const bancosBaratos = precios.filter((x) => x.valor === barato).map((x) => x.banco);
-    const bancosCaros = precios.filter((x) => x.valor === caro).map((x) => x.banco);
-    texto("#pz-barato", precio(barato));
-    texto("#pz-barato-de", bancosBaratos.length === 1 ? bancosBaratos[0].largo : nombrar(bancosBaratos));
-    texto("#pz-caro", precio(caro));
-    texto("#pz-caro-de", bancosCaros.length === 1 ? bancosCaros[0].largo : nombrar(bancosCaros));
-
-    const refs = [
-      tco != null ? { clase: "tco", nombre: traducir("TCO"), valor: tco } : null,
-      p2p != null ? { clase: "p2p", nombre: traducir("P2P Venta"), valor: p2p } : null,
-    ].filter(Boolean);
-    const todos = [...precios.map((n) => n.valor), ...refs.map((r) => r.valor)];
-    let lo = Math.min(...todos);
-    let hi = Math.max(...todos);
-    const margen = Math.max((hi - lo) * 0.05, 0.01);
-    lo -= margen;
-    hi += margen;
-    const x = (v) => ((v - lo) / (hi - lo)) * 100;
-    const origen = x(tco ?? lo + margen);
-    const partes = ['<div class="pz-filas">'];
-    precios.forEach(({ banco, valor }) => {
-      const marca = valor === barato ? " barato" : valor === caro ? " caro" : "";
-      const hasta = x(valor);
-      partes.push(`<button type="button" class="pz-banco${marca}" data-banco="${escaparHtml(banco.nombre)}" aria-label="${escaparHtml(banco.largo)}" data-tip="${escaparHtml(tipBanco(banco, valor, tco, p2p))}">
-        <span class="pz-entidad">${placa(banco)}<span class="pz-nombre">${escaparHtml(banco.corto)}</span></span>
-        <span class="pz-pista"><i class="pz-tallo" style="left:${Math.min(origen, hasta).toFixed(2)}%;width:${Math.abs(hasta - origen).toFixed(2)}%"></i><i class="pz-punto" style="left:${hasta.toFixed(2)}%"></i></span>
-        <span class="pz-precio"><span>${fmtEje.format(valor)}</span>${tco != null ? `<small>${fmtDif.format(valor - tco)}</small>` : ""}</span>
-      </button>`);
-    });
-    partes.push(`<div class="pz-refs" aria-hidden="true">${refs.map((r) => {
-      const posicion = x(r.valor).toFixed(2);
-      return `<i class="pz-ref ${r.clase}" style="left:${posicion}%"></i><b class="pz-etiqueta ${r.clase}" style="left:${posicion}%">${escaparHtml(r.nombre)} ${fmtEje.format(r.valor)}</b>`;
-    }).join("")}</div></div>`);
-    const base = 10 ** Math.floor(Math.log10((hi - lo) / 3));
-    const paso = [1, 2, 2.5, 5, 10].map((n) => Math.max(0.01, n * base))
-      .find((n) => Math.floor(hi / n) - Math.ceil(lo / n) + 1 <= 4);
-    const marcas = [];
-    for (let i = Math.ceil(lo / paso); i * paso <= hi; i += 1) {
-      const valor = i * paso;
-      marcas.push(`<span class="pz-marca" style="left:${x(valor).toFixed(2)}%">${fmtEje.format(valor)}</span>`);
-    }
-    partes.push(`<div class="pz-eje" aria-hidden="true"><div class="pz-eje-pista">${marcas.join("")}</div></div>`);
-    const escala = $b("#pz-escala");
-    escala.innerHTML = partes.join("");
-    ajustarEjePizarra();
-    document.fonts?.ready.then(ajustarEjePizarra);
-  }
-
   function marcarActivo() {
     const nombre = bancoActual()?.nombre;
     selectorBanco?.sinc();
     document.querySelectorAll("#bancos-tabla tbody tr[data-banco]").forEach((tr) => {
       tr.classList.toggle("activa", tr.dataset.banco === nombre);
-    });
-    document.querySelectorAll("#pz-escala .pz-banco").forEach((b) => {
-      b.classList.toggle("activo", b.dataset.banco === nombre);
     });
   }
 
@@ -690,7 +586,6 @@
     texto("#bancos-consulta", traducir("Cotizaciones publicadas en el sitio web de cada entidad · última consulta {fecha}", { fecha: fmtHora.format(new Date(estado.fin)) }));
     selector();
     resumenBancos();
-    pizarra();
     tabla();
     vistaBanco();
   }
@@ -699,17 +594,15 @@
     if (estado.cargando) return;
     estado.cargando = true;
     try {
-      const [textoBancos, textoTco, p2p] = await Promise.all([
+      const [textoBancos, textoTco] = await Promise.all([
         cargarDatos("bancos", [], "texto"),
         cargarDatos("tco", [], "texto").catch(() => null),
-        cargarDatos("p2p", ["USDT", "compra", "1d"]).catch(() => null),
       ]);
       const datos = leerBancos(textoBancos);
       estado.bancos = datos.bancos;
       estado.fin = datos.fin;
       estado.inicio = datos.inicio;
       estado.tco = textoTco != null ? leerTco(textoTco) : new Map();
-      estado.p2pVenta = [...(p2p?.points || [])].reverse().find((p) => p.vwap_bob != null)?.vwap_bob ?? null;
       pintar();
     } catch (error) {
       $b("#bancos-error").hidden = false;
@@ -736,12 +629,6 @@
       if (!tr) return;
       elegir(tr.dataset.banco);
       $b("#bancos-campo").scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-
-    $b("#pz-escala").addEventListener("click", (ev) => {
-      const b = ev.target.closest("button[data-banco]");
-      if (!b) return;
-      elegir(b.dataset.banco);
     });
 
     $b("#bancos-rango").addEventListener("click", (ev) => {
@@ -776,10 +663,7 @@
     let espera = null;
     window.addEventListener("resize", () => {
       clearTimeout(espera);
-      espera = setTimeout(() => {
-        dibujar();
-        ajustarEjePizarra();
-      }, 160);
+      espera = setTimeout(dibujar, 160);
     });
 
     addEventListener("idiomachange", () => {
