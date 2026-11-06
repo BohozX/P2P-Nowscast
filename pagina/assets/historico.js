@@ -1,31 +1,40 @@
 (() => {
+  const REMOTO = "https://bohozx.github.io/Mercado-Cambiario/historico/";
+  const LOCAL = "assets/historico/";
   const HISTORICO_P2PARMY = {
     es: {
       titulo: "Histórico desde marzo de 2023",
-      alt: "Precio P2P del USDT en Binance según P2P Army, diario: P2P Venta de 7,09 Bs el 17 de marzo de 2023 a un máximo de 17,90 Bs el 15 de mayo de 2025 y 11,65 Bs el 20 de agosto de 2026; P2P Compra casi igual, de 7,04 a 17,82 y 11,61 Bs.",
-      fuente: "Fuente: P2P Army. Binance P2P, promedio de los mejores anuncios de seis métodos de pago a las 20:00 de cada día, del 17 de marzo de 2023 al 20 de agosto de 2026. Desde el 21 de agosto, la serie diaria de arriba.",
-      imagen: (ancho) => `assets/historico/p2parmy-${ancho}.png`,
+      alt: "Precio P2P diario del USDT en Binance, en bolivianos, desde el 17 de marzo de 2023: P2P Venta y P2P Compra.",
+      fuente: {
+        remoto: "Fuente: P2P Army hasta el 20 de agosto de 2026 (Binance P2P, promedio de los mejores anuncios de seis métodos de pago a las 20:00 de cada día). Desde el 21 de agosto, promedio diario de la mediana de los cinco primeros anuncios de Binance P2P en cada captura de 5 minutos. Se actualiza cada día.",
+        local: "Fuente: P2P Army. Binance P2P, promedio de los mejores anuncios de seis métodos de pago a las 20:00 de cada día, del 17 de marzo de 2023 al 20 de agosto de 2026.",
+      },
     },
     en: {
       titulo: "History since March 2023",
-      alt: "Daily P2P price of USDT on Binance according to P2P Army: P2P Sell from 7.09 Bs on March 17, 2023 to a high of 17.90 Bs on May 15, 2025 and 11.65 Bs on August 20, 2026; P2P Buy almost the same, from 7.04 to 17.82 and 11.61 Bs.",
-      fuente: "Source: P2P Army. Binance P2P, average of the best ads across six payment methods at 20:00 each day, from March 17, 2023 to August 20, 2026. From August 21 on, the daily series above.",
-      imagen: (ancho) => `assets/historico/p2parmy-${ancho}-en.png`,
+      alt: "Daily P2P price of USDT on Binance, in bolivianos, since March 17, 2023: P2P Sell and P2P Buy.",
+      fuente: {
+        remoto: "Source: P2P Army through August 20, 2026 (Binance P2P, average of the best ads across six payment methods at 20:00 each day). From August 21, daily average of the median of the first five Binance P2P ads in each 5-minute capture. Updated daily.",
+        local: "Source: P2P Army. Binance P2P, average of the best ads across six payment methods at 20:00 each day, from March 17, 2023 to August 20, 2026.",
+      },
     },
   };
 
   const img = document.getElementById("historico-img");
   if (!img) return;
   const fuentes = [...img.closest("picture").querySelectorAll("source")];
+  const dia = new Intl.DateTimeFormat("en-CA", { timeZone: "America/La_Paz" }).format(new Date());
+  let base = REMOTO;
   let sinIngles = false;
   let variante = "es";
+
+  const imagen = (ancho) => `${base}p2parmy-${ancho}${variante === "en" ? "-en" : ""}.png${base === REMOTO ? `?v=${dia}` : ""}`;
 
   function aplicar() {
     const textos = HISTORICO_P2PARMY[idioma === "en" ? "en" : "es"];
     variante = idioma === "en" && !sinIngles ? "en" : "es";
-    const imagen = HISTORICO_P2PARMY[variante].imagen;
     document.getElementById("historico-titulo").textContent = textos.titulo;
-    document.getElementById("historico-fuente").textContent = textos.fuente;
+    document.getElementById("historico-fuente").textContent = textos.fuente[base === REMOTO ? "remoto" : "local"];
     img.alt = textos.alt;
     fuentes.forEach((s) => { const ruta = imagen(s.dataset.ancho); if (s.getAttribute("srcset") !== ruta) s.setAttribute("srcset", ruta); });
     const ruta = imagen(img.dataset.ancho);
@@ -33,6 +42,11 @@
   }
 
   img.addEventListener("error", () => {
+    if (base === REMOTO) {
+      base = LOCAL;
+      aplicar();
+      return;
+    }
     if (variante !== "en") return;
     sinIngles = true;
     aplicar();
