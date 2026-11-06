@@ -371,7 +371,6 @@ def expected_files(actual=()):
                 for frequency in PLATFORM_FREQUENCIES[asset]:
                     expected[f"{asset}/{path_side}/plataformas/{platform}/{frequency}.json"] = (asset, side, frequency, platform)
         expected[f"{asset}/participacion.json"] = (asset,)
-    expected["USDT/observado/top5.json"] = ()
     expected.update(expected_mediana_files(actual))
     return expected
 
@@ -395,12 +394,8 @@ def verify(data_dir: Path) -> None:
                     platform_groups.setdefault(key, {})[identity[3]] = payload["points"]
             elif len(identity) == 3:
                 continue
-            elif identity:
-                _participation(payload, *identity)
             else:
-                errors = validate_observed_payload(payload)
-                if errors:
-                    raise ValueError("; ".join(errors))
+                _participation(payload, *identity)
         except (ValueError, TypeError, KeyError, AttributeError, OverflowError) as error:
             raise ValueError(f"{relative}: {error}") from error
     for platforms in platform_groups.values():
