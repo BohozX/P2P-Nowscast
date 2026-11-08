@@ -6,16 +6,16 @@
       titulo: "Histórico desde marzo de 2023",
       alt: "Precio P2P diario del USDT en Binance, en bolivianos, desde el 17 de marzo de 2023: P2P Venta y P2P Compra.",
       fuente: {
-        remoto: "Fuente: P2P Army hasta el 20 de agosto de 2026 (Binance P2P, promedio de los mejores anuncios de seis métodos de pago a las 20:00 de cada día). Desde el 21 de agosto, promedio diario de la mediana de los cinco primeros anuncios de Binance P2P en cada captura de 5 minutos. Se actualiza cada día.",
-        local: "Fuente: P2P Army. Binance P2P, promedio de los mejores anuncios de seis métodos de pago a las 20:00 de cada día, del 17 de marzo de 2023 al 20 de agosto de 2026.",
+        remoto: "Fuente: Binance P2P. Hasta el 20 de agosto de 2026, promedio de los mejores anuncios de seis métodos de pago a las 20:00 de cada día. Desde el 21 de agosto, promedio diario de la mediana de los cinco primeros anuncios de Binance P2P en cada captura de 5 minutos. Se actualiza cada día.",
+        local: "Fuente: Binance P2P. Promedio de los mejores anuncios de seis métodos de pago a las 20:00 de cada día, del 17 de marzo de 2023 al 20 de agosto de 2026.",
       },
     },
     en: {
       titulo: "History since March 2023",
       alt: "Daily P2P price of USDT on Binance, in bolivianos, since March 17, 2023: P2P Sell and P2P Buy.",
       fuente: {
-        remoto: "Source: P2P Army through August 20, 2026 (Binance P2P, average of the best ads across six payment methods at 20:00 each day). From August 21, daily average of the median of the first five Binance P2P ads in each 5-minute capture. Updated daily.",
-        local: "Source: P2P Army. Binance P2P, average of the best ads across six payment methods at 20:00 each day, from March 17, 2023 to August 20, 2026.",
+        remoto: "Source: Binance P2P. Through August 20, 2026, average of the best ads across six payment methods at 20:00 each day. From August 21, daily average of the median of the first five Binance P2P ads in each 5-minute capture. Updated daily.",
+        local: "Source: Binance P2P. Average of the best ads across six payment methods at 20:00 each day, from March 17, 2023 to August 20, 2026.",
       },
     },
   };
