@@ -19,7 +19,6 @@ const diccionario = { en: {
   "Ejecutado": "Executed",
   "Anunciado": "Quoted",
   "Precio promedio ponderado por volumen (VWAP) de las operaciones": "Volume-weighted average price (VWAP) of trades",
-  "Mediana de los cinco primeros anuncios": "Median of the first five ads",
   "Desde": "From",
   "Hasta": "To",
   "Precio P2P de compra y venta y TCO": "P2P buy and sell price and TCO",

@@ -29,86 +29,6 @@ FORBIDDEN_FIELD_FRAGMENTS = {
     "advertiser", "merchant", "userno", "usermaskid", "userid", "email", "mobile",
     "realname", "account", "payment", "raw", "eventid", "captureid",
 }
-OBSERVED_SLOT_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d[05]:00Z$")
-OBSERVED_DAY_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-OBSERVED_INDEX = {"cada_5_minutos": "intervalos", "diario": "fechas"}
-
-OBSERVED_ASSET = "USDT"
-OBSERVED_PLATFORMS = ("binance", "bybit", "bitget")
-OBSERVED_SERIES = ("todas_promedio", *OBSERVED_PLATFORMS)
-OBSERVED_SIDES = ("BUY", "SELL")
-OBSERVED_PAGE_SIDES = {"venta": "BUY", "compra": "SELL"}
-OBSERVED_WINDOW = timedelta(days=7)
-OBSERVED_ROOT_FIELDS = ("activo", "metodo", "actualizado", "cada_5_minutos", "diario")
-OBSERVED_METHOD = (
-    "mediana de los 5 primeros anuncios de cada plataforma en cada captura de 5 minutos; "
-    "todas_promedio es el promedio simple de las plataformas con dato; "
-    "el valor diario es el promedio de los valores de 5 minutos del dia "
-    "y solo se publica con al menos 260 de 288 capturas (90%)"
-)
-def _observed_number(value: Any) -> bool:
-    if value is None:
-        return True
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return False
-    parsed = Decimal(str(value))
-    return parsed.is_finite() and parsed > 0 and -parsed.as_tuple().exponent <= 4
-
-def _observed_block(block: Any, length: int, name: str) -> list[str]:
-    if not isinstance(block, dict) or list(block) != [OBSERVED_INDEX[name], *OBSERVED_PAGE_SIDES]:
-        return [f"{name}: campos no permitidos"]
-    errors: list[str] = []
-    for page in OBSERVED_PAGE_SIDES:
-        series = block[page]
-        if not isinstance(series, dict) or list(series) != list(OBSERVED_SERIES):
-            errors.append(f"{name}.{page}: series no permitidas")
-            continue
-        for key, values in series.items():
-            if not isinstance(values, list) or len(values) != length:
-                errors.append(f"{name}.{page}.{key}: longitud incorrecta")
-            elif not all(_observed_number(value) for value in values):
-                errors.append(f"{name}.{page}.{key}: valores no numericos o con mas de 4 decimales")
-    return errors
-
-def validate_observed_payload(payload: Any) -> list[str]:
-    if not isinstance(payload, dict) or list(payload) != list(OBSERVED_ROOT_FIELDS):
-        return ["campos raiz del precio observado no permitidos"]
-    errors: list[str] = []
-    if payload["activo"] != OBSERVED_ASSET or payload["metodo"] != OBSERVED_METHOD:
-        errors.append("activo o metodo del precio observado incorrecto")
-    five = payload["cada_5_minutos"]
-    slots = five.get("intervalos") if isinstance(five, dict) else None
-    updated = payload["actualizado"]
-    if (
-        not isinstance(slots, list)
-        or not slots
-        or not all(isinstance(slot, str) and OBSERVED_SLOT_PATTERN.match(slot) for slot in slots)
-        or not isinstance(updated, str)
-        or slots[-1] != updated
-        or any(left >= right for left, right in zip(slots, slots[1:]))
-    ):
-        errors.append("intervalos de 5 minutos invalidos")
-        slots = []
-    elif parse_slot(slots[0]) <= parse_slot(updated) - OBSERVED_WINDOW:
-        errors.append("la serie de 5 minutos supera 7 dias")
-    errors.extend(_observed_block(five, len(slots), "cada_5_minutos"))
-    daily = payload["diario"]
-    days = daily.get("fechas") if isinstance(daily, dict) else None
-    try:
-        valid_days = isinstance(days, list) and all(
-            isinstance(day, str) and OBSERVED_DAY_PATTERN.match(day) and date.fromisoformat(day) for day in days
-        )
-    except ValueError:
-        valid_days = False
-    if not valid_days or any(left >= right for left, right in zip(days, days[1:])):
-        errors.append("fechas diarias invalidas")
-        days = []
-    errors.extend(_observed_block(daily, len(days), "diario"))
-    for field_name in _walk_field_names(payload):
-        if any(fragment.replace("_", "") in field_name for fragment in FORBIDDEN_FIELD_FRAGMENTS):
-            errors.append(f"campo privado detectado: {field_name}")
-            break
-    return errors
 
 
 def parse_slot(value):
@@ -227,17 +147,7 @@ def _participation(payload, asset):
 MEDIANA_ASSETS = ("USDT", "USDC")
 MEDIANA_STEPS = {"5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400}
 MEDIANA_SERIES = ("todas_promedio", "binance", "bybit", "bitget")
-MEDIANA_ROOT_FIELDS = ("activo", "frecuencia", "metodo", "actualizado", "intervalos", "venta", "compra")
-MEDIANA_METHOD = (
-    "mediana de los 5 primeros anuncios de cada plataforma en cada captura de 5 minutos; "
-    "todas_promedio es el promedio simple de las plataformas con dato en cada slot; "
-    "5m publica el valor del slot; las otras frecuencias publican el promedio simple "
-    "de los valores de 5 minutos con dato de cada serie dentro del bloque, solo si el bloque "
-    "tiene al menos 90% de sus capturas: 15m=3 de 3, 30m=6 de 6, 1h=11 de 12, 4h=44 de 48, "
-    "1d=260 de 288; una captura sin anuncios no cuenta como cero; "
-    "bloques intradiarios alineados a la epoca UTC y dias en hora de Bolivia; "
-    "sin captura con dato, nulo; precios redondeados a 4 decimales"
-)
+MEDIANA_ROOT_FIELDS = ("activo", "frecuencia", "actualizado", "intervalos", "venta", "compra")
 MEDIANA_BO = timezone(timedelta(hours=-4))
 MEDIANA_MONTH_PATH = re.compile(r"^(USDT|USDC)/mediana/(5m|15m)/(\d{4}-(?:0[1-9]|1[0-2]))\.json$")
 
@@ -275,8 +185,8 @@ def expected_mediana_files(actual):
 def validate_mediana_payload(payload, asset, frequency, month=None):
     if not isinstance(payload, dict) or list(payload) != list(MEDIANA_ROOT_FIELDS):
         raise ValueError("campos raiz de mediana no permitidos o desordenados")
-    if payload["activo"] != asset or payload["frecuencia"] != frequency or payload["metodo"] != MEDIANA_METHOD:
-        raise ValueError("activo, frecuencia o metodo de mediana incorrecto")
+    if payload["activo"] != asset or payload["frecuencia"] != frequency:
+        raise ValueError("activo o frecuencia de mediana incorrecto")
     intervals = payload["intervalos"]
     if not isinstance(intervals, list):
         raise ValueError("intervalos de mediana invalidos")
