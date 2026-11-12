@@ -1,7 +1,3 @@
-/* P2P Nowcast Bolivia — interfaz publica.
-   Este archivo solo renderiza. No calcula ni corrige ningun indicador de mercado:
-   los valores P2P se muestran tal como llegan en los JSON publicos y el tipo de
-   cambio oficial tal como lo publica el CSV diario de TCO-BCB. */
 
 const FRECUENCIAS = {
   total: { USDT: ["5m", "15m", "30m", "1h", "4h", "1d"], USDC: ["1h", "4h", "1d"] },
@@ -26,8 +22,6 @@ const FREQ_OPTIONS = [
   { id: "1d", label: "1D" },
 ];
 
-/* Duracion de cada bloque. El dato se etiqueta con el FIN de su intervalo: lo que
-   se ve como 08:15 en la frecuencia de 15 minutos es lo ocurrido antes de las 08:15. */
 const FREQ_MS = {
   "5m": 5 * 60_000,
   "15m": 15 * 60_000,
@@ -39,8 +33,6 @@ const FREQ_MS = {
 
 const esDiaria = () => state.frequency === "1d";
 
-/* Instante que se muestra para un punto. En la resolucion diaria se deja el dia
-   tal cual, sin hora y sin correrlo al dia siguiente. */
 function instante(time) {
   return new Date(time + ((esDiaria() || (esMediana() && state.frequency === "5m")) ? 0 : (FREQ_MS[state.frequency] || 0)));
 }
@@ -77,8 +69,6 @@ function availableFrequencies(asset) {
   return FRECUENCIAS[esPlataforma() ? "plataforma" : "total"][asset];
 }
 
-// El dato conserva su clave contractual. La etiqueta se muestra desde la
-// perspectiva del comerciante: BUY -> Venta y SELL -> Compra.
 const displaySides = [
   { key: "BUY", path: "compra", label: "Venta", slug: "venta" },
   { key: "SELL", path: "venta", label: "Compra", slug: "compra" },
@@ -96,9 +86,6 @@ const SIDE_VIEW = {
   spread: { p2p: "p2pVenta", tco: "p2pCompra" },
 };
 
-/* Un bloque sin operaciones no tiene precio propio. Para que la linea no quede
-   partida se arrastra el ultimo precio conocido: el mercado siguio en ese nivel
-   porque nadie opero. Solo afecta al dibujo. */
 function arrastrarPrecios(points, claves) {
   const ultimo = {};
   points.forEach((point) => {
@@ -179,7 +166,6 @@ function prepararFormatos() {
 }
 
 prepararFormatos();
-/* Fecha de hoy en Bolivia, en formato AAAA-MM-DD, para saber que TCO rige ahora. */
 const isoBoFormat = new Intl.DateTimeFormat("en-CA", {
   timeZone, year: "numeric", month: "2-digit", day: "2-digit",
 });
@@ -188,8 +174,6 @@ const hoyEnBolivia = () => isoBoFormat.format(new Date());
 const $ = (selector) => document.querySelector(selector);
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 
-/* --------------------------------------------------------------- ajustes -- */
-/* Solo preferencias de vista. Ningun dato de mercado se guarda en el navegador. */
 
 const STORE_KEY = "p2p-nowcast-view";
 
@@ -235,11 +219,9 @@ function savePreferences() {
       showActivity: state.showActivity,
     }));
   } catch (error) {
-    /* almacenamiento no disponible */
   }
 }
 
-/* ----------------------------------------------------------------- datos -- */
 
 const dataCache = new Map();
 
@@ -366,8 +348,6 @@ async function loadParticipacion(asset) {
   return payload.asset === asset ? payload : null;
 }
 
-/* El CSV se consume tal cual: una fila por fecha de vigencia con el valor ya
-   publicado. No se interpola ni se arrastra ningun valor. */
 async function loadTco() {
   const text = await cargarDatos("tco", [], "texto");
   const lines = text.trim().split(/\r?\n/);
@@ -455,8 +435,6 @@ function downsampleRows(rows, maxPoints) {
   return sampled;
 }
 
-/* Aplana una fila a la forma que consume el grafico. El TCO se resuelve por la
-   fecha boliviana del propio punto; si esa fecha no esta publicada, queda vacia. */
 function flattenRow(row) {
   const buy = row.sides.BUY;
   const sell = row.sides.SELL;
@@ -472,7 +450,6 @@ function flattenRow(row) {
   };
 }
 
-/* --------------------------------------------------------------- métricas -- */
 
 const porcentaje = (valor) => traducir("{n} %", { n: percentFormat.format(valor) });
 
@@ -492,15 +469,12 @@ function rotuloBrecha() {
     : traducir(state.side === "venta" ? "Brecha Venta · Bs." : "Brecha Compra · Bs.");
 }
 
-/* El TCO que rige hoy. El BCB publica el de manana por adelantado, pero no entra
-   en vigor hasta esa fecha: la pagina muestra el del dia en curso. */
 function tcoVigente() {
   const hoy = hoyEnBolivia();
   const fechas = [...state.tco.keys()].filter((f) => f <= hoy).sort();
   return fechas.length ? state.tco.get(fechas.at(-1)) : null;
 }
 
-/* Vigencia publicada justo antes de la que rige, para la variacion diaria. */
 function tcoPrevio() {
   const actual = tcoVigente();
   if (!actual) return null;
@@ -590,7 +564,6 @@ function renderMetrics(rows) {
   nota.textContent = `${signo} ${priceFormat.format(Math.abs(cambio))}${pct} vs ${fecha(previo.vigencia)}`;
 }
 
-/* --------------------------------------------------------------- gráfico -- */
 
 function svgElement(name, attributes = {}) {
   const element = document.createElementNS("http://www.w3.org/2000/svg", name);
@@ -650,10 +623,6 @@ function linePath(points, geo, key) {
   return path.trim();
 }
 
-/* Devuelve dos conjuntos de poligonos: donde el P2P esta por encima del TCO y
-   donde esta por debajo. Se corta en cada cruce y en cada hueco de datos, de modo
-   que el relleno nunca salta de un tramo a otro con una linea recta ni mezcla
-   los dos sentidos en una sola mancha. */
 function gapShapes(points, geo, upper, lower) {
   const valor = (point, key) => {
     const raw = point[key];
@@ -683,7 +652,6 @@ function gapShapes(points, geo, upper, lower) {
     const s = a === b ? signo : Math.sign(a - b);
 
     if (tramo && s !== 0 && signo !== 0 && s !== signo) {
-      // cruce: se interpola el punto exacto donde ambas series se tocan
       const prev = points[index - 1];
       const pa = valor(prev, upper);
       const pb = valor(prev, lower);
@@ -727,7 +695,6 @@ function renderChart(points) {
   const geo = chartGeometry(points, width, height);
   const tone = palette();
 
-  /* posicion del ultimo valor de cada serie, solo para el punto final */
   const edge = [];
   geo.activeSeries.forEach((serie) => {
     let lastIndex = -1;
@@ -738,7 +705,6 @@ function renderChart(points) {
     edge.push({ serie, index: lastIndex, anchor: geo.yOf(Number(points[lastIndex][serie.id])) });
   });
 
-  /* rejilla y niveles */
   const gridGroup = svgElement("g");
   for (let step = 0; step <= 4; step += 1) {
     const value = geo.low + ((geo.high - geo.low) * step) / 4;
@@ -756,8 +722,6 @@ function renderChart(points) {
   }
   svg.append(gridGroup);
 
-  /* sombreado de la distancia entre el precio P2P y el TCO del lado elegido.
-     Es solo relleno entre dos lineas ya dibujadas: no calcula ninguna brecha. */
   const view = SIDE_VIEW[state.side];
   const shade = gapShapes(points, geo, view.p2p, view.tco);
   if (shade.arriba) {
@@ -766,8 +730,6 @@ function renderChart(points) {
     }));
   }
   if (shade.abajo) {
-    /* Mas opaco que el tramo de arriba: sobre fondo oscuro un rojo tenue se lee
-       como un hueco en el sombreado en vez de como un tramo por debajo del TCO. */
     svg.append(svgElement("path", {
       d: shade.abajo, fill: "#ff6b6b", "fill-opacity": .3, stroke: "none",
     }));
@@ -800,7 +762,6 @@ function renderChart(points) {
     }));
   }
 
-  /* series */
   geo.activeSeries.forEach((serie) => {
     const d = linePath(points, geo, serie.id);
     if (!d) return;
@@ -814,8 +775,6 @@ function renderChart(points) {
       ...(serie.dash ? { "stroke-dasharray": serie.dash } : {}),
     }));
 
-    /* Un punto por observacion real. Donde se arrastro el precio por falta de
-       operaciones no hay punto, asi se distingue de un dato observado. */
     const paso = (width - 8 - geo.padRight) / Math.max(points.length - 1, 1);
     if (!serie.dash && paso >= 2.5) {
       const radio = clamp(paso * 0.26, 1.1, 3);
@@ -839,7 +798,6 @@ function renderChart(points) {
     }
   });
 
-  /* eje temporal: si el rango abarca poco tiempo se muestra la hora */
   const spanMs = points.at(-1).time - points[0].time;
   const useClock = spanMs <= 3 * 86_400_000;
   const ticks = Math.min(5, points.length);
@@ -863,7 +821,6 @@ function renderChart(points) {
   }
   svg.append(axisGroup);
 
-  /* crosshair */
   const crosshair = svgElement("line", {
     id: "crosshair", x1: 0, x2: 0, y1: geo.priceTop - 6, y2: geo.activityBase,
     stroke: "rgba(255,255,255,.3)", "stroke-width": 1, "stroke-dasharray": "3 3",
@@ -875,7 +832,6 @@ function renderChart(points) {
   svg.__points = points;
 }
 
-/* --------------------------------------------------------------- tooltip -- */
 
 function hideTooltip() {
   $("#chart-tooltip").hidden = true;
@@ -941,7 +897,6 @@ function showTooltip(event) {
   tooltip.style.top = `${clamp(event.clientY - rect.top - 20, 4, rect.height - tooltip.offsetHeight - 4)}px`;
 }
 
-/* --------------------------------------------------------------- estados -- */
 
 function setStatus(mode, texto) {
   state.estado = texto;
@@ -976,7 +931,6 @@ function showLoading() {
   $("#refresh-btn").classList.add("is-busy");
   hideTooltip();
 
-  /* la captura anterior no se conserva en pantalla */
   $("#market-chart").textContent = "";
   $("#market-chart").__points = [];
   $("#market-chart").__geo = null;
@@ -1012,7 +966,6 @@ function showError(error) {
   $("#status-rel").textContent = "";
 }
 
-/* -------------------------------------------------------------- controles -- */
 
 function renderFrequencySelector() {
   const host = $("#frequency-selector");
@@ -1033,8 +986,6 @@ function renderFrequencySelector() {
   });
 }
 
-/* La leyenda es el unico conmutador: al tocar cualquier serie de un lado, el
-   grafico pasa entero a ese lado (precio P2P + TCO) y se sombrea la brecha. */
 function renderLegend() {
   const host = $("#legend");
   const tone = palette();
@@ -1058,7 +1009,6 @@ function renderLegend() {
     host.append(activity);
   }
 
-  /* Boton compacto: compara los dos precios P2P entre si. */
   const spread = document.createElement("button");
   spread.type = "button";
   spread.className = "legend-icon";
@@ -1130,7 +1080,6 @@ function syncControls() {
   rotuloBrecha();
 }
 
-/* ------------------------------------------------------------------ ciclo -- */
 
 function paint() {
   const rows = state.rows;
@@ -1203,7 +1152,6 @@ async function refresh() {
   paint();
 }
 
-/* ---------------------------------------------------------------- eventos -- */
 
 function bindTip() {
   const bubble = $("#tip-bubble");
