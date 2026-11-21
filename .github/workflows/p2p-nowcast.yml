@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 20
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry.outputs.page_url }}
 
     steps:
       - name: Checkout repositorio publico
@@ -158,6 +158,17 @@ jobs:
 
       - name: Desplegar Pages
         id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128
+
+      - name: Esperar antes de reintentar
+        if: steps.deployment.outcome == 'failure'
+        shell: bash
+        run: sleep 30
+
+      - name: Reintentar despliegue de Pages
+        id: deployment_retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128
 
   cleanup-artifact:
